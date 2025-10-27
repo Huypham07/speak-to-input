@@ -1,0 +1,28 @@
+services:
+  api-service:
+    build:
+      context: ./api/src/
+      dockerfile: Dockerfile
+    container_name: speak-to-input
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./api/src:/app
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - TZ=Asia/Ho_Chi_Minh
+    env_file:
+      - .env
+    working_dir: /app
+    command:
+      ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    networks:
+      - speak-to-input-network
+      - share_network
+
+networks:
+  speak-to-input-network:
+    driver: bridge
+  share_network:
+    external: true
