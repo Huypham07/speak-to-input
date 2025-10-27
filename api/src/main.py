@@ -3,7 +3,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 import uvicorn
-from api.routers import api_router
+from api.routers.v1 import api_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from infra import InfrastructureManager
@@ -23,21 +23,22 @@ async def lifespan(app: FastAPI):
     # Initialize settings
     settings = get_settings()
 
-    # Initialize infrastructure manager
+    # Initialize infrastructure manager (database, repositories)
     infra_manager = InfrastructureManager(settings)
 
     try:
-        # Initialize all infrastructure connections
+        # Initialize infrastructure (DB, repositories, etc.)
         await infra_manager.initialize()
+        logger.info('Infrastructure initialized')
 
-        # Store infrastructure manager in app state for access in routes
-        app.state.infrastructure = infra_manager
+        # Store in app state for dependency injection
+        app.state.infra_manager = infra_manager
         app.state.settings = settings
 
         logger.info('Speak To Input Service initialized successfully')
 
     except Exception as e:
-        logger.error(f'Failed to initialize infrastructure: {e}')
+        logger.error(f'Failed to initialize: {e}')
         await infra_manager.cleanup()
         raise
 
@@ -45,8 +46,6 @@ async def lifespan(app: FastAPI):
 
     # Cleanup on shutdown
     logger.info('Shutting down Speak To Input Service...')
-
-    # Then cleanup infrastructure
     await infra_manager.cleanup()
     logger.info('Speak To Input Service shutdown completed')
 
@@ -78,6 +77,11 @@ def root():
         'description': 'Service for processing and managing speak to input workflows.',
         'version': '1.0.0',
     }
+
+
+@app.post('/health', tags=['Health Check'])
+def health_check():
+    return {'status': 'healthy'}
 
 
 if __name__ == '__main__':

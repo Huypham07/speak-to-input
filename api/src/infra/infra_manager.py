@@ -10,18 +10,26 @@ logger = get_logger(__name__)
 
 
 class InfrastructureManager:
-    """Manager for all infrastructure connections"""
+    """
+    Manager for infrastructure-level dependencies only.
+    Handles: Database, Cache, Message Queue, External APIs, Repositories, etc.
+
+    Does NOT handle application services - those are composed at API layer.
+    """
 
     def __init__(self, settings: Settings):
         self.settings = settings
+
+        # Infrastructure
         self._postgres: Optional[PostgresConnection] = None
 
     async def initialize(self) -> None:
         """Initialize all infrastructure connections"""
         try:
-            # Initialize Athena PostgreSQL
+            # Initialize database
             self._postgres = PostgresConnection(self.settings)
             await self._postgres.connect()
+            logger.info('PostgreSQL connection established')
 
             logger.info('Infrastructure initialized successfully')
 
@@ -41,7 +49,7 @@ class InfrastructureManager:
         except Exception as e:
             logger.error(f'Error during infrastructure cleanup: {e}')
 
-    # Property accessors
+    # Property accessors for infrastructure only
     @property
     def postgres(self) -> Optional[PostgresConnection]:
         """Get PostgreSQL connection"""
