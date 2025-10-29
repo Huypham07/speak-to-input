@@ -11,6 +11,7 @@ class VoiceService:
     Service for voice processing:
     1. ASR (Automatic Speech Recognition)
     2. Text normalization
+    3. Streaming ASR support
     """
 
     def __init__(self, settings: Settings):
@@ -62,7 +63,7 @@ class VoiceService:
         audio_data: str,
     ) -> tuple[str, str, float]:
         """
-        Process audio input end-to-end.
+        Process audio input.
 
         Args:
             audio_data: Base64 encoded audio
@@ -77,3 +78,21 @@ class VoiceService:
         normalized = await self.normalize_text(asr_text)
 
         return asr_text, normalized, confidence
+
+    async def stream_asr(self, audio_chunk: str) -> str:
+        """
+        Process audio chunk for streaming ASR (partial transcript).
+
+        This is used for real-time feedback during recording.
+
+        Args:
+            audio_chunk: Base64 encoded audio chunk
+
+        Returns:
+            Partial transcript text
+        """
+        # TODO: Implement streaming ASR
+
+        logger.debug('Processing audio chunk for streaming ASR')
+
+        return ''
