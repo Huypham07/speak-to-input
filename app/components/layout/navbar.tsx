@@ -2,11 +2,19 @@
 
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
-import { LogOut, Home, Send, FileText, PiggyBank, Mic, Square } from "lucide-react";
+import { LogOut, Home, Send, FileText, PiggyBank, Mic, Square, Settings, User } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSpeech } from "@/lib/speech-context";
 import { useSidebar } from "@/lib/sidebar-context";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export function Navbar() {
   const { user, logout } = useAuth();
@@ -42,7 +50,7 @@ export function Navbar() {
         }`}>
         {/* Header */}
         <div className="p-6 border-b border-border/50 bg-linear-to-r from-blue-600 to-emerald-600 relative">
-          <div className={`flex items-center ${isCollapsed ? "justify-center" : "gap-3"} transition-all duration-300`}>
+          <div className={`flex items-center ${isCollapsed ? "justify-start" : "gap-3"} transition-all duration-300`}>
             {/* Logo - Click to toggle sidebar */}
             <button
               onClick={toggleSidebar}
@@ -55,7 +63,7 @@ export function Navbar() {
             {!isCollapsed && (
               <Link
                 href="/dashboard"
-                className="font-bold text-lg text-white whitespace-nowrap hover:text-white/90 transition-colors">
+                className="font-bold text-lg text-white whitespace-nowrap overflow-hidden text-ellipsis hover:text-white/90 transition-colors">
                 FinFlow
               </Link>
             )}
@@ -68,37 +76,59 @@ export function Navbar() {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center ${
-                isCollapsed ? "justify-center px-3" : "gap-3 px-4"
-              } py-3 rounded-lg transition-all shadow-sm ${
+              className={`flex items-center h-12 ${
+                isCollapsed ? "justify-start px-3" : "gap-3 px-4"
+              } rounded-lg transition-all shadow-sm ${
                 isActive(item.href)
                   ? "bg-linear-to-r from-blue-600 to-emerald-600 text-white shadow-md scale-105"
                   : "text-muted-foreground hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-foreground hover:shadow-md hover:scale-102"
               }`}
               title={isCollapsed ? item.label : undefined}>
               <item.icon className="h-5 w-5 shrink-0" />
-              {!isCollapsed && <span className="font-medium whitespace-nowrap">{item.label}</span>}
+              {!isCollapsed && (
+                <span className="font-medium whitespace-nowrap overflow-hidden text-ellipsis">{item.label}</span>
+              )}
             </Link>
           ))}
         </nav>
 
-        {/* User Info & Logout */}
-        <div className="p-4 border-t border-border/50 space-y-3 bg-slate-50/50 dark:bg-slate-900/50">
-          {!isCollapsed && (
-            <div className="px-4 py-2 text-sm">
-              <p className="text-muted-foreground">Đăng nhập bởi</p>
-              <p className="font-semibold text-foreground truncate">{user.name}</p>
-            </div>
-          )}
+        {/* Settings & Logout */}
+        <div className="p-4 border-t border-border/50 space-y-2 bg-slate-50/50 dark:bg-slate-900/50">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className={`w-full h-12 flex items-center justify-start ${
+                  isCollapsed ? "px-3" : "gap-2 px-4"
+                } rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-muted-foreground hover:text-foreground`}>
+                <Settings className="h-4 w-4 shrink-0" />
+                {!isCollapsed && (
+                  <span className="font-medium whitespace-nowrap overflow-hidden text-ellipsis">Cài đặt</span>
+                )}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>Cài đặt</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem>
+                <User className="mr-2 h-4 w-4" />
+                <span>Tài khoản</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                <Settings className="mr-2 h-4 w-4" />
+                <span>Khác</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <Button
             onClick={logout}
             variant="outline"
-            className={`w-full ${
-              isCollapsed ? "justify-center px-2" : "justify-start gap-2"
+            className={`w-full h-12 justify-start ${
+              isCollapsed ? "px-3" : "gap-2 px-4"
             } bg-white dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-950 hover:text-red-600 dark:hover:text-red-400 hover:border-red-300`}
             title={isCollapsed ? "Đăng xuất" : undefined}>
-            <LogOut className="h-4 w-4" />
-            {!isCollapsed && "Đăng xuất"}
+            <LogOut className="h-4 w-4 shrink-0" />
+            {!isCollapsed && <span className="whitespace-nowrap overflow-hidden text-ellipsis">Đăng xuất</span>}
           </Button>
         </div>
       </aside>

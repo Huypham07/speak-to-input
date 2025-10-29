@@ -17,11 +17,21 @@ import { SpeechResultModal } from "@/components/speech/speech-result-modal";
 import { useSpeech } from "@/lib/speech-context";
 import { useFinancial } from "@/lib/financial-context";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Settings, User, LogOut } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type ActiveForm = "transfer" | "bill" | "fund" | null;
 
 export default function DashboardPage() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { isCollapsed } = useSidebar();
   const router = useRouter();
   const [activeForm, setActiveForm] = useState<ActiveForm>(null);
@@ -80,9 +90,37 @@ export default function DashboardPage() {
           isCollapsed ? "md:ml-20" : "md:ml-64"
         }`}>
         <div className="max-w-6xl mx-auto space-y-8">
-          <div>
-            <p className="text-sm text-muted-foreground">Xin chào,</p>
-            <h1 className="text-xl md:text-2xl font-semibold text-foreground">{user.name}</h1>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">Xin chào,</p>
+              <h1 className="text-xl md:text-2xl font-semibold text-foreground">{user.name}</h1>
+            </div>
+
+            {/* Settings dropdown for mobile */}
+            <div className="md:hidden">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Settings className="h-6 w-6" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel>Cài đặt</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem className="py-3">
+                    <User className="mr-2 h-5 w-5" />
+                    <span className="text-base">Tài khoản</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="py-3">
+                    <Settings className="mr-2 h-5 w-5" />
+                    <span className="text-base">Khác</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={logout} className="text-red-600 dark:text-red-400 py-3">
+                    <LogOut className="mr-2 h-5 w-5" />
+                    <span className="text-base">Đăng xuất</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
 
           {/* Balance Card */}
