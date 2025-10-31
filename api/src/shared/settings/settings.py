@@ -37,9 +37,18 @@ class LLMSettings(BaseSettings):
         env_prefix = 'LLM_'
 
 
+class WhisperSettings(BaseSettings):
+    host: str = Field(default='http://localhost')
+    port: str = Field(default='8080')
+
+    class Config:
+        env_prefix = 'WHISPER_'
+
+
 class Settings(BaseSettings):
     postgres: PostgresSettings = Field(default_factory=PostgresSettings)
     secret_key: str = Field('secret_key', description='Secret key for JWT and other security operations')
+    whisper: WhisperSettings = Field(default_factory=WhisperSettings)
 
     class Config:
         env_nested_delimiter = '__'

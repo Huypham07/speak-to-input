@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import base64
+import os
+import tempfile
+
+import aiohttp
 from shared.logging import get_logger
 from shared.settings import Settings
 
@@ -16,6 +21,20 @@ class VoiceService:
 
     def __init__(self, settings: Settings):
         self.settings = settings
+        self.server_url = f"{settings.whisper.host}:{settings.whisper.port}"
+
+    async def load_model(self, model_path: str):
+        """Load model via /load endpoint before transcript"""
+        async with aiohttp.ClientSession() as session:
+            data = aiohttp.FormData()
+            data.add_field('model', model_path)
+            async with session.post(f"{self.server_url}/load", data=data) as resp:
+                if resp.status != 200:
+                    text = await resp.text()
+                    logger.error(f"Failed to load model: {text}")
+                    return False
+                logger.info(f"Model loaded: {model_path}")
+                return True
 
     async def speech_to_text(self, audio_data: str) -> tuple[str, float]:
         """
@@ -31,10 +50,46 @@ class VoiceService:
         # - Decode base64 audio
         # - Call ASR service
         # - Return text and confidence
+        audio_bytes = base64.b64decode(audio_data)
 
-        logger.info('Processing audio with ASR')
+    # Giữ file lại (delete=False) để có thể reopen
+        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp_file:
+            tmp_file.write(audio_bytes)
+            tmp_file.flush()
+            tmp_path = tmp_file.name
 
-        return '', 1.0
+        logger.info(f"Sending audio to server at {self.server_url}/inference")
+        timeout = aiohttp.ClientTimeout(total=None)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            data = aiohttp.FormData()
+
+            # 👇 giữ file mở cho đến khi request kết thúc
+            f = open(tmp_path, 'rb')
+            try:
+                data.add_field('file', f, filename='audio.wav', content_type='audio/wav')
+                data.add_field('temperature', '0.0')
+                data.add_field('temperature_inc', '0.2')
+                data.add_field('response_format', 'srt')
+                async with session.post(f"{self.server_url}/inference", data=data) as resp:
+                    if resp.status != 200:
+                        text = await resp.text()
+                        logger.error(f"Inference failed: {text}")
+                        return '', 0.0
+
+                    ctype = resp.headers.get('Content-Type', '')
+                    if 'json' in ctype:
+                        result = await resp.json()
+                        text = result.get('text', '')
+                        conf = result.get('confidence', 1.0)
+                    else:
+                        text = await resp.text()
+                        conf = 1.0
+                    logger.debug(f"Raw response:\n{text}")
+
+                    return text, conf
+            finally:
+                f.close()
+                os.remove(tmp_path)
 
     async def normalize_text(self, text: str) -> str:
         """
