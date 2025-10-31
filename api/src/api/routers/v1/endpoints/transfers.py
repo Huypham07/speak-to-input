@@ -4,34 +4,14 @@ from typing import List
 
 from api.helpers.dependencies import get_current_user
 from api.helpers.jwt_auth import TokenData
+from api.schemas import TransferRequest
+from api.schemas import TransferResponse
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import status
-from pydantic import BaseModel
-from pydantic import Field
 
 router = APIRouter(prefix='/transfers', tags=['Money Transfers'])
-
-
-class TransferRequest(BaseModel):
-    """Request to transfer money"""
-    from_account_id: str | None = None  # If None, use default account
-    recipient_account_number: str = Field(..., description='Recipient account number')
-    recipient_name: str | None = None
-    amount: float = Field(..., gt=0)
-    message: str | None = None
-
-
-class TransferResponse(BaseModel):
-    """Transfer response"""
-    transaction_id: str
-    from_account: str
-    to_account: str
-    amount: float
-    message: str | None
-    status: str
-    created_at: str
 
 
 @router.post('', response_model=TransferResponse)
@@ -53,9 +33,9 @@ async def create_transfer(
 
     # Mock response
     return TransferResponse(
-        transaction_id='txn_123',
-        from_account='1234567890',
-        to_account=request.recipient_account_number,
+        id=123,
+        from_account_id=1,
+        to_account_number=request.recipient_account_number,
         amount=request.amount,
         message=request.message,
         status='completed',
@@ -79,7 +59,7 @@ async def list_transfers(
 
 @router.get('/{transaction_id}', response_model=TransferResponse)
 async def get_transfer(
-    transaction_id: str,
+    transaction_id: int,
     current_user: TokenData = Depends(get_current_user),
 ):
     """

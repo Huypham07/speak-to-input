@@ -2,7 +2,7 @@
 
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
-import { LogOut, Home, Send, FileText, PiggyBank, Mic, Square, Settings, User } from "lucide-react";
+import { LogOut, Home, Send, FileText, PiggyBank, Mic, Square, Settings, User, Wallet } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSpeech } from "@/lib/speech-context";
@@ -26,6 +26,7 @@ export function Navbar() {
 
   const navItems = [
     { href: "/dashboard", icon: Home, label: "Trang chủ" },
+    { href: "/accounts", icon: Wallet, label: "Tài khoản" },
     { href: "/dashboard?tab=transfer", icon: Send, label: "Chuyển tiền" },
     { href: "/dashboard?tab=bills", icon: FileText, label: "Hóa đơn" },
     { href: "/dashboard?tab=funds", icon: PiggyBank, label: "Tiết kiệm" },

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+from api.dependencies import get_account_repository
 from api.dependencies import get_user_repository
 from api.helpers.dependencies import get_current_user
 from api.helpers.jwt_auth import ACCESS_TOKEN_EXPIRE_MINUTES
@@ -13,12 +14,15 @@ from api.helpers.jwt_auth import verify_password
 from api.schemas import LoginRequest
 from api.schemas import RegisterRequest
 from api.schemas import UserResponse
+from domain.entities import Account
 from domain.entities import User
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import status
+from infra.db.repositories import AccountRepository
 from infra.db.repositories import UserRepository
+from shared.utils import generate_account_number
 
 router = APIRouter(prefix='/auth', tags=['Authentication'])
 
@@ -77,6 +81,7 @@ async def login(
 async def register(
     request: RegisterRequest,
     user_repo: UserRepository = Depends(get_user_repository),
+    account_repo: AccountRepository = Depends(get_account_repository),
 ):
     # Check if username already exists
     existing_user = await user_repo.get_by_username(request.username)
@@ -109,6 +114,23 @@ async def register(
 
     # Save to database
     created_user = await user_repo.create(new_user)
+
+    # Auto-create default account for new user
+    # Generate unique account number based on user_id
+    # Sequence = 1 for first account
+    account_number = generate_account_number(created_user.id, sequence=1)
+
+    default_account = Account(
+        user_id=created_user.id,
+        account_number=account_number,
+        account_name=f'Tài khoản chính - {request.full_name}',
+        balance=0.0,
+        currency='VND',
+        account_type='checking',
+        is_active=True,
+    )
+
+    await account_repo.create(default_account)
 
     return UserResponse.model_validate(created_user)
 

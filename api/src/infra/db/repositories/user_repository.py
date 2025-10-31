@@ -61,6 +61,14 @@ class AccountRepository(BaseRepository):
             )
             return result.scalars().all()
 
+    async def count_by_user_id(self, user_id: int) -> int:
+        """Count total accounts for a user"""
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(AccountModel).where(AccountModel.user_id == user_id),
+            )
+            return len(result.scalars().all())
+
     async def get_by_account_number(self, account_number: str) -> Optional[AccountModel]:
         """Get account by account number"""
         async with self.session_factory() as session:

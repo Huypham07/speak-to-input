@@ -28,7 +28,6 @@ class User(BaseModel):
 class Account(BaseModel):
     """Domain entity for financial Account"""
 
-    account_id: str = Field(..., description='Unique account identifier')
     user_id: int = Field(..., description='Owner user ID')
     account_number: str = Field(..., description='Account number')
     account_name: str = Field(..., description='Account name/label')
@@ -47,7 +46,6 @@ class Account(BaseModel):
 class Contact(BaseModel):
     """Domain entity for transfer Contact"""
 
-    contact_id: str = Field(..., description='Unique contact identifier')
     user_id: int = Field(..., description='Owner user ID')
     contact_name: str = Field(..., description='Contact display name')
     account_number: str = Field(..., description='Contact account number')
