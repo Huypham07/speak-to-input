@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from .auth import router as auth_router
-from .bills import router as bills_router
+from .endpoints.auth import router as auth_router
+from .endpoints.bills import router as bills_router
+from .endpoints.funds import router as funds_router
+from .endpoints.speech import router as speech_router
+from .endpoints.transfers import router as transfers_router
 from .endpoints.voice import voice_router
-from .funds import router as funds_router
-from .speech import router as speech_router
-from .transfers import router as transfers_router
 
 api_router = APIRouter(prefix='/api/v1')
 
