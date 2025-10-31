@@ -2,18 +2,18 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import Field
-from sqlalchemy import Column
 from sqlalchemy import DateTime
 from sqlalchemy import func
 from sqlalchemy import MetaData
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.orm import Mapped
+from sqlalchemy.orm import mapped_column
 
 
 class BaseModel(DeclarativeBase):
     metadata = MetaData(
         naming_convention={
-            'ix': '%(table_name)s_%(column_0_label)s_idx',
+            'ix': 'idx_%(table_name)s_%(column_0_label)s',
             'uq': 'uq_%(table_name)s_%(column_0_name)s',
             'ck': 'ck_%(table_name)s_%(constraint_name)s',
             'fk': 'fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s',
@@ -21,6 +21,15 @@ class BaseModel(DeclarativeBase):
         },
     )
 
-    id: int = Field(primary_key=True)
-    created_at: datetime = Field(sa_column=Column(DateTime(timezone=True), default=func.now()))
-    updated_at: datetime = Field(sa_column=Column(DateTime(timezone=True), default=func.now(), onupdate=func.now()))
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )

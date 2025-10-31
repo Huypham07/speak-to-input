@@ -6,16 +6,24 @@ from enum import Enum
 class StateType(str, Enum):
     """Business state types in the state machine"""
 
-    # Initial
-    INITIAL = 'initial'
+    # Initial state
+    IDLE = 'IDLE'
 
-    # In-progress states
-    AWAITING_CLARIFICATION = 'awaiting_clarification'
-    AWAITING_CONFIRMATION = 'awaiting_confirmation'
-    READY = 'ready'
-    EXECUTING = 'executing'
+    # Intent processing states
+    INTENT_CLASSIFIED = 'INTENT_CLASSIFIED'
+    VALIDATING = 'VALIDATING'
+
+    # Clarification states
+    CLARIFYING = 'CLARIFYING'
+    DISAMBIGUATING = 'DISAMBIGUATING'
+
+    # Confirmation states
+    AWAITING_CONFIRMATION = 'AWAITING_CONFIRMATION'
+
+    # Execution states
+    EXECUTING = 'EXECUTING'
 
     # Terminal states
-    COMPLETED = 'completed'
-    FAILED = 'failed'
-    CANCELLED = 'cancelled'
+    COMPLETED = 'COMPLETED'
+    FAILED = 'FAILED'
+    CANCELLED = 'CANCELLED'

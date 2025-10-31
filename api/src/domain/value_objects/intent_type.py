@@ -6,22 +6,29 @@ from enum import Enum
 class IntentType(str, Enum):
     """Supported intent types"""
 
-    # Structured intents
-    ACCOUNT_OPENING = 'account_opening'
-    SEND_MONEY = 'send_money'
-    CHECK_BALANCE = 'check_balance'
-    QUICK_ACTION = 'quick_action'
+    # Transaction intents
+    SEND_MONEY = 'SEND_MONEY'
 
-    # Complex intents
-    CREATE_FUND = 'create_fund'
-    CREATE_LOAN = 'create_loan'
-    BUDGET_ALLOCATION = 'budget_allocation'
-    QUERY_FINANCE = 'query_finance'
+    # Financial management intents
+    CREATE_BILL = 'CREATE_BILL'
+    CREATE_FUND = 'CREATE_FUND'
+
+    # Query intents
+    CHECK_BALANCE = 'CHECK_BALANCE'
+    QUERY_FINANCE = 'QUERY_FINANCE'
+
+    # Account intents
+    ACCOUNT_OPENING = 'ACCOUNT_OPENING'
+
+    # Other intents
+    QUICK_ACTION = 'QUICK_ACTION'
+    CREATE_LOAN = 'CREATE_LOAN'
+    BUDGET_ALLOCATION = 'BUDGET_ALLOCATION'
 
     # Meta intents
-    UNKNOWN = 'unknown'
-    CONFIRMATION = 'confirmation'
-    CANCELLATION = 'cancellation'
+    UNKNOWN = 'UNKNOWN'
+    CONFIRMATION = 'CONFIRMATION'
+    CANCELLATION = 'CANCELLATION'
 
 
 class IntentCategory(str, Enum):

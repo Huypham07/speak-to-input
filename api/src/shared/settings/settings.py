@@ -39,6 +39,7 @@ class LLMSettings(BaseSettings):
 
 class Settings(BaseSettings):
     postgres: PostgresSettings = Field(default_factory=PostgresSettings)
+    secret_key: str = Field('secret_key', description='Secret key for JWT and other security operations')
 
     class Config:
         env_nested_delimiter = '__'
