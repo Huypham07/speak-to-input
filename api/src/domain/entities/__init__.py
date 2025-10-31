@@ -5,6 +5,14 @@ from .capability import Capability
 from .execution_result import ExecutionResult
 from .field_validation import FieldValidation
 from .field_validation import ValidationResult
+from .session import Session
+from .transaction import Bill
+from .transaction import FundTransaction
+from .transaction import SavingsFund
+from .transaction import Transaction
+from .user import Account
+from .user import Contact
+from .user import User
 
 __all__ = [
     'BusinessState',
@@ -12,4 +20,12 @@ __all__ = [
     'ExecutionResult',
     'FieldValidation',
     'ValidationResult',
+    'Session',
+    'User',
+    'Account',
+    'Contact',
+    'Transaction',
+    'Bill',
+    'SavingsFund',
+    'FundTransaction',
 ]

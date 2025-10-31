@@ -1,38 +1,44 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
 
-import { useState } from "react"
-import { useAuth } from "@/lib/auth-context"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import Link from "next/link"
+import { useState } from "react";
+import { useAuth } from "@/lib/auth-context";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import Link from "next/link";
 
 export function SignupForm({ onSuccess }: { onSuccess: () => void }) {
-  const [name, setName] = useState("")
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [confirmPassword, setConfirmPassword] = useState("")
-  const [error, setError] = useState("")
-  const { signup, isLoading } = useAuth()
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState("");
+  const { signup, isLoading } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError("")
+    e.preventDefault();
+    setError("");
 
     if (password !== confirmPassword) {
-      setError("Passwords do not match")
-      return
+      setError("Passwords do not match");
+      return;
+    }
+
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters");
+      return;
     }
 
     try {
-      await signup(email, password, name)
-      onSuccess()
+      await signup(username, email, password, fullName || undefined);
+      onSuccess();
     } catch (err) {
-      setError("Failed to create account")
+      setError(err instanceof Error ? err.message : "Failed to create account");
     }
-  }
+  };
 
   return (
     <Card className="w-full max-w-md">
@@ -43,8 +49,15 @@ export function SignupForm({ onSuccess }: { onSuccess: () => void }) {
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <label className="text-sm font-medium">Full Name</label>
-            <Input type="text" placeholder="John Doe" value={name} onChange={(e) => setName(e.target.value)} required />
+            <label className="text-sm font-medium">Username</label>
+            <Input
+              type="text"
+              placeholder="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              minLength={3}
+              required
+            />
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium">Email</label>
@@ -57,12 +70,17 @@ export function SignupForm({ onSuccess }: { onSuccess: () => void }) {
             />
           </div>
           <div className="space-y-2">
+            <label className="text-sm font-medium">Full Name (Optional)</label>
+            <Input type="text" placeholder="John Doe" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+          </div>
+          <div className="space-y-2">
             <label className="text-sm font-medium">Password</label>
             <Input
               type="password"
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              minLength={6}
               required
             />
           </div>
@@ -89,5 +107,5 @@ export function SignupForm({ onSuccess }: { onSuccess: () => void }) {
         </p>
       </CardContent>
     </Card>
-  )
+  );
 }

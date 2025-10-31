@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from .base_connection import BaseDBConnection
+from .models import BaseModel
 
 logger = get_logger(__name__)
 
@@ -44,6 +45,10 @@ class PostgresConnection(BaseDBConnection):
         except Exception as e:
             logger.error(f'Failed to connect to PostgreSQL: {e}')
             raise
+
+    async def init_models(self):
+        async with self._client.begin() as conn:
+            await conn.run_sync(BaseModel.metadata.create_all)
 
     async def close(self) -> None:
         """Close PostgreSQL connection"""

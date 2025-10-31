@@ -1,30 +1,30 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
 
-import { useState } from "react"
-import { useAuth } from "@/lib/auth-context"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import Link from "next/link"
+import { useState } from "react";
+import { useAuth } from "@/lib/auth-context";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import Link from "next/link";
 
 export function LoginForm({ onSuccess }: { onSuccess: () => void }) {
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [error, setError] = useState("")
-  const { login, isLoading } = useAuth()
+  const [usernameOrEmail, setUsernameOrEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const { login, isLoading } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError("")
+    e.preventDefault();
+    setError("");
     try {
-      await login(email, password)
-      onSuccess()
+      await login(usernameOrEmail, password);
+      onSuccess();
     } catch (err) {
-      setError("Invalid email or password")
+      setError(err instanceof Error ? err.message : "Invalid credentials");
     }
-  }
+  };
 
   return (
     <Card className="w-full max-w-md">
@@ -35,12 +35,12 @@ export function LoginForm({ onSuccess }: { onSuccess: () => void }) {
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <label className="text-sm font-medium">Email</label>
+            <label className="text-sm font-medium">Username or Email</label>
             <Input
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              type="text"
+              placeholder="username or email@example.com"
+              value={usernameOrEmail}
+              onChange={(e) => setUsernameOrEmail(e.target.value)}
               required
             />
           </div>
@@ -67,5 +67,5 @@ export function LoginForm({ onSuccess }: { onSuccess: () => void }) {
         </p>
       </CardContent>
     </Card>
-  )
+  );
 }

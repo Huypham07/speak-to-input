@@ -93,7 +93,7 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Xin chào,</p>
-              <h1 className="text-xl md:text-2xl font-semibold text-foreground">{user.name}</h1>
+              <h1 className="text-xl md:text-2xl font-semibold text-foreground">{user.full_name}</h1>
             </div>
 
             {/* Settings dropdown for mobile */}

@@ -47,6 +47,7 @@ class WhisperSettings(BaseSettings):
 
 class Settings(BaseSettings):
     postgres: PostgresSettings = Field(default_factory=PostgresSettings)
+    secret_key: str = Field('secret_key', description='Secret key for JWT and other security operations')
     whisper: WhisperSettings = Field(default_factory=WhisperSettings)
 
     class Config:

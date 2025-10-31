@@ -9,6 +9,9 @@ export function BalanceCard() {
 
   if (!user) return null;
 
+  // TODO: Fetch account balance from backend
+  const balance = 0;
+
   return (
     <Card className="bg-linear-to-br from-blue-600 to-emerald-600 border-0 text-white">
       <CardContent className="pt-6">
@@ -16,12 +19,14 @@ export function BalanceCard() {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-blue-100 text-sm">Số dư tổng</p>
-              <p className="text-4xl font-bold mt-2">{user.balance.toLocaleString("vi-VN")} đ</p>
+              <p className="text-4xl font-bold mt-2">{balance.toLocaleString("vi-VN")} đ</p>
             </div>
             <TrendingUp className="h-8 w-8 text-blue-100" />
           </div>
           <div className="pt-4 border-t border-white/20">
-            <p className="text-xs text-blue-100">Trạng thái tài khoản: Hoạt động</p>
+            <p className="text-xs text-blue-100">
+              Trạng thái tài khoản: {user.is_active ? "Hoạt động" : "Không hoạt động"}
+            </p>
           </div>
         </div>
       </CardContent>
