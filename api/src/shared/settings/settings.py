@@ -39,7 +39,7 @@ class LLMSettings(BaseSettings):
 
 class WhisperSettings(BaseSettings):
     host: str = Field(default='http://localhost')
-    port: str = Field(default='8080')
+    port: int = Field(default=8080)
 
     class Config:
         env_prefix = 'WHISPER_'

@@ -1,5 +1,6 @@
 #!/bin/bash
 # Retry up to 3 times if whisper-server exits
+
 MAX_RETRIES=3
 COUNT=0
 
