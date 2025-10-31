@@ -4,41 +4,16 @@ from typing import List
 
 from api.helpers.dependencies import get_current_user
 from api.helpers.jwt_auth import TokenData
+from api.schemas import CreateFundRequest
+from api.schemas import FundDepositRequest
+from api.schemas import FundResponse
+from api.schemas import FundWithdrawRequest
 from fastapi import APIRouter
-from fastapi import Body
 from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import status
-from pydantic import BaseModel
-from pydantic import Field
 
 router = APIRouter(prefix='/funds', tags=['Savings Funds'])
-
-
-class CreateFundRequest(BaseModel):
-    """Request to create a savings fund"""
-    fund_name: str = Field(..., min_length=1, max_length=100)
-    target_amount: float = Field(..., gt=0)
-    target_date: str = Field(..., description='Target date in YYYY-MM-DD format')
-    initial_amount: float = Field(0, ge=0)
-    monthly_contribution: float = Field(0, ge=0)
-    category: str | None = None
-    auto_transfer: bool = Field(False)
-    notes: str | None = None
-
-
-class FundResponse(BaseModel):
-    """Fund response"""
-    fund_id: str
-    fund_name: str
-    target_amount: float
-    current_amount: float
-    target_date: str
-    category: str | None
-    monthly_contribution: float
-    progress_percentage: float
-    status: str
-    created_at: str
 
 
 @router.post('', response_model=FundResponse)
@@ -60,7 +35,7 @@ async def create_fund(
     progress = (request.initial_amount / request.target_amount * 100) if request.target_amount > 0 else 0
 
     return FundResponse(
-        fund_id='fund_123',
+        id=123,
         fund_name=request.fund_name,
         target_amount=request.target_amount,
         current_amount=request.initial_amount,
@@ -89,7 +64,7 @@ async def list_funds(
 
 @router.get('/{fund_id}', response_model=FundResponse)
 async def get_fund(
-    fund_id: str,
+    fund_id: int,
     current_user: TokenData = Depends(get_current_user),
 ):
     """
@@ -106,8 +81,8 @@ async def get_fund(
 
 @router.post('/{fund_id}/deposit')
 async def deposit_to_fund(
-    fund_id: str,
-    amount: float = Body(..., gt=0, embed=True),
+    fund_id: int,
+    request: FundDepositRequest,
     current_user: TokenData = Depends(get_current_user),
 ):
     """
@@ -128,8 +103,8 @@ async def deposit_to_fund(
 
 @router.post('/{fund_id}/withdraw')
 async def withdraw_from_fund(
-    fund_id: str,
-    amount: float = Body(..., gt=0, embed=True),
+    fund_id: int,
+    request: FundWithdrawRequest,
     current_user: TokenData = Depends(get_current_user),
 ):
     """

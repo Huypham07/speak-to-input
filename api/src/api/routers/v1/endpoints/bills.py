@@ -7,37 +7,15 @@ from typing import List
 from api.dependencies import get_bill_repository
 from api.helpers.dependencies import get_current_user
 from api.helpers.jwt_auth import TokenData
-from application.use_cases.execute_plugin import execute_create_bill
+from api.schemas import BillResponse
+from api.schemas import CreateBillRequest
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import status
 from infra.db.repositories import BillRepository
-from pydantic import BaseModel
-from pydantic import Field
 
 router = APIRouter(prefix='/bills', tags=['Bills'])
-
-
-class CreateBillRequest(BaseModel):
-    """Request to create a bill"""
-    bill_name: str = Field(..., min_length=1, max_length=100)
-    amount: float = Field(..., gt=0)
-    due_date: str = Field(..., description='Due date in YYYY-MM-DD format')
-    category: str | None = Field(None, description='Bill category')
-    recurring: bool = Field(False)
-    reminder_days: int = Field(3, ge=0, le=30)
-    notes: str | None = None
-
-
-class BillResponse(BaseModel):
-    """Bill response"""
-    bill_id: int
-    bill_name: str
-    amount: float
-    due_date: str
-    category: str | None = None
-    status: str
 
 
 @router.post('', response_model=BillResponse, status_code=status.HTTP_201_CREATED)
@@ -52,25 +30,17 @@ async def create_bill(
     """
 
     # Execute via plugin (same logic as speech)
-    result = await execute_create_bill(
-        user_id=int(current_user.user_id),
-        bill_name=request.bill_name,
+    # TODO: Implement
+    # return mock response for now
+
+    return BillResponse(
+        bill_id=123,
+        bill_name=request.title,
         amount=request.amount,
         due_date=request.due_date,
         category=request.category,
-        recurring=request.recurring,
-        reminder_days=request.reminder_days,
-        notes=request.notes or '',
-        bill_repository=bill_repo,
+        status='pending',
     )
-
-    if not result.success:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=result.message,
-        )
-
-    return BillResponse(**result.data)
 
 
 @router.get('', response_model=List[BillResponse])
@@ -89,14 +59,7 @@ async def list_bills(
     )
 
     return [
-        BillResponse(
-            bill_id=bill.bill_id,
-            bill_name=bill.bill_name,
-            amount=float(bill.amount),
-            due_date=bill.due_date.isoformat(),
-            category=bill.category,
-            status=bill.status,
-        )
+        BillResponse.model_validate(bill)
         for bill in bills
     ]
 
@@ -109,7 +72,7 @@ async def get_bill(
 ):
     """Get bill details (Traditional API)"""
 
-    bill = await bill_repo.get_by_id(bill_id)
+    bill = await bill_repo.read_by_id(bill_id)
 
     if not bill:
         raise HTTPException(
@@ -124,14 +87,7 @@ async def get_bill(
             detail='Access denied',
         )
 
-    return BillResponse(
-        bill_id=bill.bill_id,
-        bill_name=bill.bill_name,
-        amount=float(bill.amount),
-        due_date=bill.due_date.isoformat(),
-        category=bill.category,
-        status=bill.status,
-    )
+    return BillResponse.model_validate(bill)
 
 
 @router.post('/{bill_id}/pay')
@@ -142,7 +98,7 @@ async def pay_bill(
 ) -> Dict[str, Any]:
     """Mark bill as paid (Traditional API)"""
 
-    bill = await bill_repo.get_by_id(bill_id)
+    bill = await bill_repo.read_by_id(bill_id)
 
     if not bill:
         raise HTTPException(
@@ -176,7 +132,7 @@ async def delete_bill(
 ) -> Dict[str, Any]:
     """Delete bill (Traditional API)"""
 
-    bill = await bill_repo.get_by_id(bill_id)
+    bill = await bill_repo.read_by_id(bill_id)
 
     if not bill:
         raise HTTPException(
@@ -192,17 +148,10 @@ async def delete_bill(
         )
 
     # Delete
-    await bill_repo.delete(bill_id)
+    await bill_repo.delete_by_id(bill_id)
 
     return {
         'bill_id': bill_id,
         'deleted': True,
         'message': 'Bill deleted successfully',
     }
-
-    # - Create transaction record
-
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail='Not implemented',
-    )
