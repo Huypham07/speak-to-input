@@ -3,7 +3,7 @@
 import { useAuth } from "@/lib/auth-context";
 import { useSidebar } from "@/lib/sidebar-context";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { Navbar } from "@/components/layout/navbar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DepositWithdrawForm } from "@/components/financial/deposit-withdraw-form";
@@ -24,7 +24,7 @@ interface Account {
   is_active: boolean;
 }
 
-export default function AccountsPage() {
+function AccountsPageContent() {
   const { user, isLoading } = useAuth();
   const { isCollapsed } = useSidebar();
   const router = useRouter();
@@ -226,5 +226,18 @@ export default function AccountsPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function AccountsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <Skeleton className="h-96 w-full max-w-6xl" />
+        </div>
+      }>
+      <AccountsPageContent />
+    </Suspense>
   );
 }
