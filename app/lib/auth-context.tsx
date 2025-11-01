@@ -2,7 +2,6 @@
 
 import type React from "react";
 import { createContext, useContext, useState, useCallback, useEffect } from "react";
-import { useRouter } from "next/navigation";
 
 interface User {
   id: number;
@@ -26,7 +25,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true); // Start with TRUE to prevent premature redirects
-  const router = useRouter();
 
   // Check authentication on mount
   useEffect(() => {
@@ -145,12 +143,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [login]
   );
 
-  const logout = useCallback(() => {
-    // Cookie will be cleared by calling backend logout endpoint
-    fetch("/api/auth/logout", { method: "POST" }).catch(console.error);
+  const logout = useCallback(async () => {
+    // Clear user state immediately
     setUser(null);
-    router.push("/login");
-  }, [router]);
+
+    // Call backend logout to clear cookies
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
+
+    // Force redirect to login
+    window.location.href = "/login";
+  }, []);
 
   return <AuthContext.Provider value={{ user, isLoading, login, signup, logout }}>{children}</AuthContext.Provider>;
 }

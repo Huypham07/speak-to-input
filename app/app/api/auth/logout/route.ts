@@ -16,12 +16,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Logout failed" }, { status: response.status });
     }
 
-    // Forward the response which includes cookie deletion
+    // Create response
     const data = await response.json();
     const nextResponse = NextResponse.json(data);
 
-    // Also delete cookie on this domain
     nextResponse.cookies.delete("access_token");
+    nextResponse.cookies.delete("refresh_token");
+
+    // Also forward Set-Cookie headers from backend
+    const setCookieHeaders = response.headers.get("set-cookie");
+    if (setCookieHeaders) {
+      nextResponse.headers.set("Set-Cookie", setCookieHeaders);
+    }
 
     return nextResponse;
   } catch (error) {
