@@ -2,9 +2,10 @@
 
 import { useAuth } from "@/lib/auth-context";
 import { Card, CardContent } from "@/components/ui/card";
-import { TrendingUp, Wallet } from "lucide-react";
+import { TrendingUp, Wallet, ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useRouter } from "next/navigation";
 
 interface Account {
   id: number;
@@ -18,18 +19,14 @@ interface Account {
 
 export function BalanceCard() {
   const { user } = useAuth();
+  const router = useRouter();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchAccounts = async () => {
       try {
-        const token = localStorage.getItem("token");
-        const response = await fetch("http://localhost:8000/api/v1/accounts", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+        const response = await fetch("/api/accounts");
 
         if (response.ok) {
           const data = await response.json();
@@ -52,16 +49,21 @@ export function BalanceCard() {
   const totalBalance = accounts.reduce((sum, acc) => sum + acc.balance, 0);
 
   return (
-    <Card className="bg-linear-to-br from-blue-600 to-emerald-600 border-0 text-white">
+    <Card
+      className="bg-linear-to-br from-blue-600 to-emerald-600 border-0 text-white cursor-pointer hover:shadow-lg transition-shadow"
+      onClick={() => router.push("/accounts")}>
       <CardContent className="pt-6">
         <div className="space-y-4">
           <div className="flex justify-between items-start">
-            <div>
+            <div className="flex-1">
               <p className="text-blue-100 text-sm">Số dư tổng</p>
               {loading ? (
                 <Skeleton className="h-10 w-48 mt-2 bg-white/20" />
               ) : (
-                <p className="text-4xl font-bold mt-2">{totalBalance.toLocaleString("vi-VN")} đ</p>
+                <div className="flex items-center gap-2 mt-2">
+                  <p className="text-4xl font-bold">{totalBalance.toLocaleString("vi-VN")} đ</p>
+                  <ChevronRight className="h-6 w-6 text-blue-100" />
+                </div>
               )}
             </div>
             <TrendingUp className="h-8 w-8 text-blue-100" />

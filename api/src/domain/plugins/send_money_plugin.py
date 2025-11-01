@@ -155,14 +155,46 @@ class SendMoneyPlugin(IntentPlugin):
         """Resolve capabilities based on validation"""
         capabilities = []
 
-        # If amount is missing, request it
+        # Handle INVALID fields - request correction
+        if validation_result.invalid_fields:
+            for field in validation_result.invalid_fields:
+                if field.field_name == 'amount':
+                    capabilities.append(
+                        Capability(
+                            capability_type=CapabilityType.REQUEST_FIELD,
+                            priority=1,
+                            data={
+                                'field': 'amount',
+                                'message': f'{field.error_message or "Số tiền không hợp lệ"}. Vui lòng nhập lại.',
+                                'current_value': field.value,
+                            },
+                        ),
+                    )
+
+        # Handle AMBIGUOUS fields - request clarification
+        if validation_result.ambiguous_fields:
+            for field in validation_result.ambiguous_fields:
+                if field.field_name == 'recipient':
+                    capabilities.append(
+                        Capability(
+                            capability_type=CapabilityType.REQUEST_CLARIFICATION,
+                            priority=1,
+                            data={
+                                'field': 'recipient',
+                                'message': 'Tìm thấy nhiều người nhận. Bạn muốn chuyển cho ai?',
+                                'options': field.value,
+                            },
+                        ),
+                    )
+
+        # Handle MISSING fields - request input
         if validation_result.missing_fields:
             for field in validation_result.missing_fields:
                 if field.field_name == 'amount':
                     capabilities.append(
                         Capability(
                             capability_type=CapabilityType.REQUEST_FIELD,
-                            priority=1,
+                            priority=2,
                             data={
                                 'field': 'amount',
                                 'message': 'Bạn muốn chuyển bao nhiêu?',

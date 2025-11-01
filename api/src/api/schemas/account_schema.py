@@ -31,10 +31,17 @@ class WithdrawRequest(BaseModel):
 
 class TransactionResponse(BaseModel):
     """Transaction response schema"""
-    transaction_id: str
-    account_id: int
-    transaction_type: str  # deposit, withdraw
+    id: int
+    user_id: int
+    from_account_id: Optional[int] = None
+    to_account_id: Optional[int] = None
+    transaction_type: str  # deposit, withdraw, transfer
     amount: float
-    balance_after: float
-    note: Optional[str]
+    currency: str
+    status: str
+    message: Optional[str] = None
+    recipient_account_number: Optional[str] = None
+    recipient_name: Optional[str] = None
+    recipient_bank: Optional[str] = None
     created_at: str
+    updated_at: Optional[str] = None

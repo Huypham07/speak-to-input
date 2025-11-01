@@ -2,14 +2,17 @@
 
 import { useAuth } from "@/lib/auth-context";
 import { useSidebar } from "@/lib/sidebar-context";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Navbar } from "@/components/layout/navbar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DepositWithdrawForm } from "@/components/financial/deposit-withdraw-form";
-import { Wallet, ArrowUpRight, ArrowDownRight, Clock } from "lucide-react";
+import { TransferForm } from "@/components/financial/transfer-form";
+import TransactionHistory from "@/components/financial/transaction-history";
+import { Wallet, ArrowUpRight, ArrowDownRight, Clock, ChevronLeft } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface Account {
   id: number;
@@ -25,26 +28,34 @@ export default function AccountsPage() {
   const { user, isLoading } = useAuth();
   const { isCollapsed } = useSidebar();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
   const [loading, setLoading] = useState(true);
+  const [transactionKey, setTransactionKey] = useState(0);
+  const [activeTab, setActiveTab] = useState<string>("deposit");
 
-  // Lấy token từ localStorage hoặc cookie thông qua useAuth
-  const getToken = () => {
-    // Ưu tiên lấy từ localStorage
-    return localStorage.getItem("access_token");
-  };
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!isLoading && !user) {
+      router.push("/login");
+    }
+  }, [user, isLoading, router]);
+
+  // Check for action query parameter
+  useEffect(() => {
+    const action = searchParams.get("action");
+    if (action === "transfer") {
+      setActiveTab("transfer");
+    } else if (action === "deposit") {
+      setActiveTab("deposit");
+    }
+  }, [searchParams]);
 
   const fetchAccounts = async () => {
     setLoading(true);
     try {
-      const token = getToken();
-      if (!token) return;
-      const response = await fetch("http://localhost:8000/api/v1/accounts", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await fetch("/api/accounts");
       if (response.ok) {
         const data = await response.json();
         setAccounts(data);
@@ -65,9 +76,17 @@ export default function AccountsPage() {
     }
   }, [user]);
 
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    // Update URL without reload
+    const newUrl = value === "deposit" ? "/accounts?action=deposit" : `/accounts?action=${value}`;
+    router.push(newUrl, { scroll: false });
+  };
+
   const handleSuccess = () => {
-    // Refresh accounts after successful transaction
+    // Refresh accounts and transaction history after successful transaction
     fetchAccounts();
+    setTransactionKey((prev) => prev + 1); // Force TransactionHistory to re-fetch
   };
 
   if (!user) return null;
@@ -81,10 +100,18 @@ export default function AccountsPage() {
           isCollapsed ? "md:ml-20" : "md:ml-64"
         }`}>
         <div className="max-w-6xl mx-auto space-y-8">
-          {/* Header */}
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-foreground">Quản lý tài khoản</h1>
-            <p className="text-muted-foreground mt-2">Xem và quản lý các tài khoản của bạn</p>
+          {/* Header with Back Button */}
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => router.push("/dashboard")}
+              className="p-2 hover:bg-accent rounded-lg transition-colors"
+              title="Quay lại Dashboard">
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold text-foreground">Quản lý tài khoản</h1>
+              <p className="text-muted-foreground mt-2">Xem và quản lý các tài khoản của bạn</p>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -127,7 +154,7 @@ export default function AccountsPage() {
                             </CardTitle>
                             <CardDescription className="mt-1">STK: {account.account_number}</CardDescription>
                           </div>
-                          <Badge variant={account.is_active ? "default" : "secondary"}>
+                          <Badge variant={account.is_active ? "default" : "secondary"} className="text-xs">
                             {account.is_active ? "Hoạt động" : "Tạm khóa"}
                           </Badge>
                         </div>
@@ -140,7 +167,7 @@ export default function AccountsPage() {
                               {account.balance.toLocaleString("vi-VN")} {account.currency}
                             </p>
                           </div>
-                          <Badge variant="outline">{account.account_type}</Badge>
+                          {/* <Badge variant="outline">{account.account_type}</Badge> */}
                         </div>
                       </CardContent>
                     </Card>
@@ -149,16 +176,41 @@ export default function AccountsPage() {
               )}
             </div>
 
-            {/* Deposit/Withdraw Form */}
+            {/* Deposit/Withdraw/Transfer Forms */}
             <div className="space-y-4">
               <h2 className="text-xl font-semibold">Giao dịch</h2>
 
               {selectedAccount ? (
-                <DepositWithdrawForm
-                  accountId={selectedAccount.id}
-                  currentBalance={selectedAccount.balance}
-                  onSuccess={handleSuccess}
-                />
+                <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+                  <TabsList className="grid w-full grid-cols-2 bg-linear-to-r from-blue-600 to-emerald-600 p-1">
+                    <TabsTrigger
+                      value="deposit"
+                      className="data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=inactive]:text-white">
+                      Nạp tiền
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="transfer"
+                      className="data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=inactive]:text-white">
+                      Chuyển tiền
+                    </TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="deposit">
+                    <DepositWithdrawForm
+                      accountId={selectedAccount.id}
+                      currentBalance={selectedAccount.balance}
+                      onSuccess={handleSuccess}
+                    />
+                  </TabsContent>
+
+                  <TabsContent value="transfer">
+                    <TransferForm
+                      accountId={selectedAccount.id}
+                      currentBalance={selectedAccount.balance}
+                      onSuccess={handleSuccess}
+                    />
+                  </TabsContent>
+                </Tabs>
               ) : (
                 <Card>
                   <CardContent className="pt-6 text-center text-muted-foreground">
@@ -167,20 +219,8 @@ export default function AccountsPage() {
                 </Card>
               )}
 
-              {/* Recent Transactions (Mock) */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Clock className="h-5 w-5" />
-                    Giao dịch gần đây
-                  </CardTitle>
-                  <CardDescription>Lịch sử giao dịch của tài khoản</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground text-center py-4">Chưa có giao dịch nào</p>
-                  {/* TODO: Implement transaction history */}
-                </CardContent>
-              </Card>
+              {/* Transaction History */}
+              <TransactionHistory key={transactionKey} accountId={selectedAccount?.id} />
             </div>
           </div>
         </div>

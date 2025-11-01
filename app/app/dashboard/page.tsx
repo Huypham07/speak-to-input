@@ -30,19 +30,49 @@ import {
 
 type ActiveForm = "transfer" | "bill" | "fund" | null;
 
+interface Account {
+  id: number;
+  account_number: string;
+  account_name: string;
+  balance: number;
+  currency: string;
+  account_type: string;
+  is_active: boolean;
+}
+
 export default function DashboardPage() {
-  const { user, logout } = useAuth();
+  const { user, isLoading, logout } = useAuth();
   const { isCollapsed } = useSidebar();
   const router = useRouter();
   const [activeForm, setActiveForm] = useState<ActiveForm>(null);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const { transcript } = useSpeech();
   const { addTransfer, addBill, addFund } = useFinancial();
 
   useEffect(() => {
-    if (!user) {
+    if (!isLoading && !user) {
       router.push("/login");
     }
-  }, [user, router]);
+  }, [user, isLoading, router]);
+
+  // Fetch accounts for transfer form
+  useEffect(() => {
+    const fetchAccounts = async () => {
+      try {
+        const response = await fetch("/api/accounts");
+        if (response.ok) {
+          const data = await response.json();
+          setAccounts(data);
+        }
+      } catch (error) {
+        console.error("Error fetching accounts:", error);
+      }
+    };
+
+    if (user) {
+      fetchAccounts();
+    }
+  }, [user]);
 
   const handleCommandMatched = (commandId: string, data: Record<string, any>) => {
     switch (commandId) {
@@ -152,7 +182,13 @@ export default function DashboardPage() {
                 : "Tạo quỹ tiết kiệm"}
             </DialogTitle>
           </DialogHeader>
-          {activeForm === "transfer" && <TransferForm onSuccess={() => setActiveForm(null)} />}
+          {activeForm === "transfer" && accounts.length > 0 && (
+            <TransferForm
+              accountId={accounts[0].id}
+              currentBalance={accounts[0].balance}
+              onSuccess={() => setActiveForm(null)}
+            />
+          )}
           {activeForm === "bill" && <BillForm onSuccess={() => setActiveForm(null)} />}
           {activeForm === "fund" && <FundForm onSuccess={() => setActiveForm(null)} />}
         </DialogContent>
