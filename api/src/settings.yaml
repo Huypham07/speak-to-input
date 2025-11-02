@@ -14,3 +14,8 @@ secret_key: sti-team-24
 whisper:
   host: http://localhost
   port: 8080
+
+llm:
+  api_key: AIzaSyCoG8R5gWx5ZKHQxu-uKzHQLUQAj2mumTg
+  model: gemini-2.5-flash
+  base_url: https://generativelanguage.googleapis.com
