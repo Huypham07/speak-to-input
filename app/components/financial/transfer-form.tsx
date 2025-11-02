@@ -63,7 +63,12 @@ export function TransferForm({ accountId, currentBalance, onSuccess }: TransferF
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.detail || "Có lỗi xảy ra");
+        toast({
+          title: "Lỗi",
+          description: error.error || "Có lỗi xảy ra",
+          variant: "destructive",
+        });
+        return;
       }
 
       const data = await response.json();
@@ -83,6 +88,7 @@ export function TransferForm({ accountId, currentBalance, onSuccess }: TransferF
         onSuccess();
       }
     } catch (error: any) {
+      console.error("Transfer catch error:", error);
       toast({
         title: "Lỗi",
         description: error.message || "Có lỗi xảy ra",

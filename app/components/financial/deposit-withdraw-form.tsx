@@ -54,7 +54,7 @@ export function DepositWithdrawForm({ accountId, currentBalance, onSuccess }: De
       if (!response.ok) {
         const error = await response.json();
         console.error("Deposit error:", error);
-        throw new Error(error.detail || "Có lỗi xảy ra");
+        throw new Error(error.error || "Có lỗi xảy ra");
       }
 
       const data = await response.json();

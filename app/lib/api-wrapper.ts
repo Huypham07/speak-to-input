@@ -2,37 +2,88 @@ import { NextRequest, NextResponse } from "next/server";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-/**
- * Wrapper for authenticated API calls
- * Automatically adds Authorization header from request cookies
- */
+async function refreshAccessToken(request: NextRequest): Promise<{
+  success: boolean;
+  newToken?: string;
+  setCookie?: string;
+}> {
+  try {
+    const refreshToken = request.cookies.get("refresh_token")?.value;
+
+    if (!refreshToken) {
+      return { success: false };
+    }
+
+    const response = await fetch(`${API_URL}/api/v1/auth/refresh`, {
+      method: "POST",
+      headers: {
+        Cookie: `refresh_token=${refreshToken}`,
+      },
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      const setCookieHeader = response.headers.get("set-cookie");
+
+      return {
+        success: true,
+        newToken: data.access_token,
+        setCookie: setCookieHeader || undefined,
+      };
+    }
+
+    return { success: false };
+  } catch (error) {
+    console.error("Token refresh failed:", error);
+    return { success: false };
+  }
+}
+
 export async function authenticatedFetch(
   request: NextRequest,
   endpoint: string,
   options: RequestInit = {}
 ): Promise<Response> {
-  // Get token from cookie or Authorization header
-  const token =
-    request.cookies.get("access_token")?.value || request.headers.get("authorization")?.replace("Bearer ", "");
+  // Get token from cookie
+  const token = request.cookies.get("access_token")?.value;
+  const refreshToken = request.cookies.get("refresh_token")?.value;
 
-  if (!token) {
+  if (!token && !refreshToken) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
       headers: { "Content-Type": "application/json" },
     });
   }
 
-  // Merge headers
+  // Merge headers with Authorization
   const headers = {
     ...options.headers,
     Authorization: `Bearer ${token}`,
   };
 
-  // Make request to backend
-  return fetch(`${API_URL}${endpoint}`, {
+  // First attempt - make request to backend
+  let response = await fetch(`${API_URL}${endpoint}`, {
     ...options,
     headers,
   });
+
+  // If 401, try to refresh token and retry ONCE
+  if (response.status === 401) {
+    const refreshResult = await refreshAccessToken(request);
+
+    if (refreshResult.success && refreshResult.newToken) {
+      // Retry with new token
+      response = await fetch(`${API_URL}${endpoint}`, {
+        ...options,
+        headers: {
+          ...options.headers,
+          Authorization: `Bearer ${refreshResult.newToken}`,
+        },
+      });
+    }
+  }
+
+  return response;
 }
 
 /**
