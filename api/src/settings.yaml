@@ -16,6 +16,6 @@ whisper:
   port: 8080
 
 llm:
-  api_key: AIzaSyCoG8R5gWx5ZKHQxu-uKzHQLUQAj2mumTg
+  api_key: ""
   model: gemini-2.5-flash
   base_url: https://generativelanguage.googleapis.com
