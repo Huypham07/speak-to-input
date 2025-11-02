@@ -4,6 +4,7 @@ from application.services import IntentUnderstandingService
 from application.services import StateMachineService
 from application.services import VoiceService
 from application.services.orchestration_service import OrchestrationService
+from domain.plugins.registry import get_plugin_registry
 from fastapi import Depends
 from fastapi import Request
 from infra.db.repositories import AccountRepository
@@ -92,8 +93,12 @@ def get_voice_service(
 def get_intent_service(
     settings: Settings = Depends(get_settings),
 ) -> IntentUnderstandingService:
-    """Create Intent Understanding Service"""
-    return IntentUnderstandingService(settings)
+    """Create Intent Understanding Service with plugin registry"""
+    plugin_registry = get_plugin_registry()
+    return IntentUnderstandingService(
+        settings=settings,
+        plugin_registry=plugin_registry,
+    )
 
 
 def get_state_machine_service(
