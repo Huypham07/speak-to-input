@@ -24,39 +24,66 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [token, setToken] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true); // Start with TRUE to prevent premature redirects
 
-  // Load token from localStorage on mount
+  // Check authentication on mount
   useEffect(() => {
-    const storedToken = localStorage.getItem("access_token");
-    if (storedToken) {
-      setToken(storedToken);
-      // Fetch user info
-      fetchUserInfo(storedToken);
-    }
+    fetchUserInfo();
   }, []);
 
-  const fetchUserInfo = async (accessToken: string) => {
+  const fetchUserInfo = async () => {
+    setIsLoading(true); // Start loading
     try {
-      const response = await fetch("/api/auth/me", {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
+      // No need to pass token - cookie will be sent automatically
+      const response = await fetch("/api/auth/me");
 
       if (response.ok) {
         const userData = await response.json();
         setUser(userData);
+      } else if (response.status === 401) {
+        // Token expired, try to refresh using refresh token from cookie
+        console.log("Access token expired, attempting refresh...");
+        const refreshed = await refreshAccessToken();
+        if (refreshed) {
+          // Retry fetching user info
+          const retryResponse = await fetch("/api/auth/me");
+          if (retryResponse.ok) {
+            const userData = await retryResponse.json();
+            setUser(userData);
+            return;
+          }
+        }
+        // Refresh failed, clear user
+        setUser(null);
       } else {
-        // Token invalid, clear it
-        localStorage.removeItem("access_token");
-        setToken(null);
+        // Other errors
+        setUser(null);
       }
     } catch (error) {
       console.error("Failed to fetch user info:", error);
-      localStorage.removeItem("access_token");
-      setToken(null);
+      setUser(null);
+    } finally {
+      setIsLoading(false); // Done loading
+    }
+  };
+
+  const refreshAccessToken = async (): Promise<boolean> => {
+    try {
+      // Refresh endpoint reads refresh_token from httpOnly cookie
+      const response = await fetch("/api/auth/refresh", {
+        method: "POST",
+        credentials: "include", // Send cookies
+      });
+
+      if (response.ok) {
+        return true;
+      } else {
+        console.error("Failed to refresh token");
+        return false;
+      }
+    } catch (error) {
+      console.error("Error refreshing token:", error);
+      return false;
     }
   };
 
@@ -77,13 +104,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error(data.error || "Login failed");
       }
 
-      // Save token to both localStorage and cookie
-      localStorage.setItem("access_token", data.access_token);
-      document.cookie = `access_token=${data.access_token}; path=/; max-age=${30 * 24 * 60 * 60}`; // 30 days
-      setToken(data.access_token);
-
-      // Fetch user info
-      await fetchUserInfo(data.access_token);
+      // Cookies are set by backend, just fetch user info
+      await fetchUserInfo();
     } finally {
       setIsLoading(false);
     }
@@ -121,11 +143,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [login]
   );
 
-  const logout = useCallback(() => {
-    localStorage.removeItem("access_token");
-    document.cookie = "access_token=; path=/; max-age=0"; // Clear cookie
-    setToken(null);
+  const logout = useCallback(async () => {
+    // Clear user state immediately
     setUser(null);
+
+    // Call backend logout to clear cookies
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
+
+    // Force redirect to login
+    window.location.href = "/login";
   }, []);
 
   return <AuthContext.Provider value={{ user, isLoading, login, signup, logout }}>{children}</AuthContext.Provider>;

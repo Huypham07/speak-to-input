@@ -94,6 +94,10 @@ class AccountRepository(BaseRepository):
             if not model:
                 raise NotFoundError(detail=f'Account {account_id} not found')
 
+            # Ensure balance is Decimal
+            if not isinstance(model.balance, Decimal):
+                model.balance = Decimal(str(model.balance))
+
             if operation == 'add':
                 model.balance += amount
             elif operation == 'subtract':
@@ -131,6 +135,12 @@ class AccountRepository(BaseRepository):
 
             from_account = models[from_account_id]
             to_account = models[to_account_id]
+
+            # Ensure balances are Decimal
+            if not isinstance(from_account.balance, Decimal):
+                from_account.balance = Decimal(str(from_account.balance))
+            if not isinstance(to_account.balance, Decimal):
+                to_account.balance = Decimal(str(to_account.balance))
 
             # Check balance
             if from_account.balance < amount:

@@ -26,8 +26,7 @@ export function Navbar() {
 
   const navItems = [
     { href: "/dashboard", icon: Home, label: "Trang chủ" },
-    { href: "/accounts", icon: Wallet, label: "Tài khoản" },
-    { href: "/dashboard?tab=transfer", icon: Send, label: "Chuyển tiền" },
+    { href: "/accounts?action=transfer", icon: Send, label: "Chuyển tiền" },
     { href: "/dashboard?tab=bills", icon: FileText, label: "Hóa đơn" },
     { href: "/dashboard?tab=funds", icon: PiggyBank, label: "Tiết kiệm" },
   ];
@@ -158,11 +157,11 @@ export function Navbar() {
             style={{
               clipPath: "ellipse(50% 100% at 50% 100%)",
             }}>
-            <div className="w-full h-full bg-linear-to-t from-slate-50 to-white dark:from-slate-900 dark:to-slate-950 border-t-2 border-x-2 border-border/70 rounded-t-[100%] shadow-[0_-4px_16px_rgba(0,0,0,0.12)] dark:shadow-[0_-4px_16px_rgba(0,0,0,0.4)]" />
+            <div className="w-full h-full bg-white rounded-t-[100%]" />
           </div>
 
           {/* Navigation items - 5 items with center one being speech button */}
-          <div className="grid grid-cols-5 items-center h-16 px-2">
+          <div className="grid grid-cols-5 items-center h-16 px-2 bg-white">
             {/* First two nav items */}
             {navItems.slice(0, 2).map((item) => (
               <Link

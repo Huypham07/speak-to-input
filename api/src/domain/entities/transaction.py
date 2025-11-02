@@ -4,14 +4,13 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel
 from pydantic import Field
+from shared.base import BaseModel
 
 
 class Transaction(BaseModel):
     """Domain entity for financial Transaction"""
 
-    transaction_id: Optional[int] = Field(None, description='Transaction ID (auto-generated)')
     user_id: int = Field(..., description='User who initiated the transaction')
     from_account_id: Optional[int] = Field(None, description='Source account ID')
     to_account_id: Optional[int] = Field(None, description='Destination account ID')
@@ -37,14 +36,10 @@ class Transaction(BaseModel):
     created_at: Optional[datetime] = Field(None, description='Created timestamp')
     completed_at: Optional[datetime] = Field(None, description='Completion timestamp')
 
-    class Config:
-        from_attributes = True
-
 
 class Bill(BaseModel):
     """Domain entity for Bill payment"""
 
-    bill_id: Optional[int] = Field(None, description='Bill ID (auto-generated)')
     user_id: int = Field(..., description='User who owns the bill')
 
     # Bill details
@@ -76,14 +71,10 @@ class Bill(BaseModel):
     created_at: Optional[datetime] = Field(None, description='Created timestamp')
     updated_at: Optional[datetime] = Field(None, description='Updated timestamp')
 
-    class Config:
-        from_attributes = True
-
 
 class SavingsFund(BaseModel):
     """Domain entity for Savings Fund"""
 
-    fund_id: Optional[int] = Field(None, description='Fund ID (auto-generated)')
     user_id: int = Field(..., description='User who owns the fund')
     account_id: Optional[int] = Field(None, description='Linked account ID')
 
@@ -114,14 +105,10 @@ class SavingsFund(BaseModel):
     created_at: Optional[datetime] = Field(None, description='Created timestamp')
     updated_at: Optional[datetime] = Field(None, description='Updated timestamp')
 
-    class Config:
-        from_attributes = True
-
 
 class FundTransaction(BaseModel):
     """Domain entity for Fund Transaction (deposit/withdrawal)"""
 
-    id: Optional[int] = Field(None, description='Transaction ID')
     fund_id: int = Field(..., description='Associated fund ID')
     transaction_id: Optional[int] = Field(None, description='Linked transaction ID')
 
@@ -134,6 +121,3 @@ class FundTransaction(BaseModel):
 
     # Timestamp
     created_at: Optional[datetime] = Field(None, description='Created timestamp')
-
-    class Config:
-        from_attributes = True

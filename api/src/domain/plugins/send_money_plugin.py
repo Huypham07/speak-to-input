@@ -155,14 +155,46 @@ class SendMoneyPlugin(IntentPlugin):
         """Resolve capabilities based on validation"""
         capabilities = []
 
-        # If amount is missing, request it
+        # Handle INVALID fields - request correction
+        if validation_result.invalid_fields:
+            for field in validation_result.invalid_fields:
+                if field.field_name == 'amount':
+                    capabilities.append(
+                        Capability(
+                            capability_type=CapabilityType.REQUEST_FIELD,
+                            priority=1,
+                            data={
+                                'field': 'amount',
+                                'message': f'{field.error_message or "Số tiền không hợp lệ"}. Vui lòng nhập lại.',
+                                'current_value': field.value,
+                            },
+                        ),
+                    )
+
+        # Handle AMBIGUOUS fields - request clarification
+        if validation_result.ambiguous_fields:
+            for field in validation_result.ambiguous_fields:
+                if field.field_name == 'recipient':
+                    capabilities.append(
+                        Capability(
+                            capability_type=CapabilityType.REQUEST_CLARIFICATION,
+                            priority=1,
+                            data={
+                                'field': 'recipient',
+                                'message': 'Tìm thấy nhiều người nhận. Bạn muốn chuyển cho ai?',
+                                'options': field.value,
+                            },
+                        ),
+                    )
+
+        # Handle MISSING fields - request input
         if validation_result.missing_fields:
             for field in validation_result.missing_fields:
                 if field.field_name == 'amount':
                     capabilities.append(
                         Capability(
                             capability_type=CapabilityType.REQUEST_FIELD,
-                            priority=1,
+                            priority=2,
                             data={
                                 'field': 'amount',
                                 'message': 'Bạn muốn chuyển bao nhiêu?',
@@ -263,6 +295,13 @@ class SendMoneyPlugin(IntentPlugin):
                     data={},
                 )
 
+            if recipient_info.get('account_id') == from_account.id:
+                return ExecutionResult(
+                    success=False,
+                    message='Không thể chuyển tiền vào cùng một tài khoản',
+                    data={},
+                )
+
             # Determine if internal or external transfer
             if recipient_info.get('account_id'):
                 # Internal transfer (between accounts in system)
@@ -270,15 +309,15 @@ class SendMoneyPlugin(IntentPlugin):
 
                 # Perform transfer
                 updated_from, updated_to = await account_repo.transfer(
-                    from_account_id=int(from_account.account_id),
+                    from_account_id=int(from_account.id),
                     to_account_id=to_account_id,
                     amount=amount,
                 )
 
-                # Create transaction record
-                transaction = Transaction(
+                # Create transaction record for sender
+                sender_transaction = Transaction(
                     user_id=int(user_id),
-                    from_account_id=int(from_account.account_id),
+                    from_account_id=int(from_account.id),
                     to_account_id=to_account_id,
                     transaction_type='transfer',
                     amount=amount,
@@ -287,14 +326,29 @@ class SendMoneyPlugin(IntentPlugin):
                     status='completed',
                 )
 
-                created_txn = await transaction_repo.create(transaction)
-                await transaction_repo.update_status(created_txn.transaction_id, 'completed')
+                sender_txn = await transaction_repo.create(sender_transaction)
+                await transaction_repo.update_status(sender_txn.id, 'completed')
+
+                # Create transaction record for recipient (if different user)
+                if updated_to.user_id != int(user_id):
+                    recipient_transaction = Transaction(
+                        user_id=updated_to.user_id,
+                        from_account_id=int(from_account.id),
+                        to_account_id=to_account_id,
+                        transaction_type='transfer',
+                        amount=amount,
+                        currency='VND',
+                        message=message,
+                        status='completed',
+                    )
+                    recipient_txn = await transaction_repo.create(recipient_transaction)
+                    await transaction_repo.update_status(recipient_txn.id, 'completed')
 
                 return ExecutionResult(
                     success=True,
                     message=f'Chuyển {amount:,} VND thành công đến {recipient_info["name"]}',
                     data={
-                        'transaction_id': created_txn.transaction_id,
+                        'transaction_id': sender_txn.id,
                         'amount': float(amount),
                         'recipient': recipient_info['name'],
                         'new_balance': float(updated_from.balance),
@@ -304,7 +358,7 @@ class SendMoneyPlugin(IntentPlugin):
                 # External transfer (to external bank account)
                 # Just deduct from account and create pending transaction
                 updated_account = await account_repo.update_balance(
-                    account_id=int(from_account.account_id),
+                    account_id=int(from_account.id),
                     amount=amount,
                     operation='subtract',
                 )
@@ -312,7 +366,7 @@ class SendMoneyPlugin(IntentPlugin):
                 # Create transaction record
                 transaction = Transaction(
                     user_id=int(user_id),
-                    from_account_id=int(from_account.account_id),
+                    from_account_id=int(from_account.id),
                     to_account_id=None,
                     transaction_type='transfer',
                     amount=amount,
@@ -328,13 +382,13 @@ class SendMoneyPlugin(IntentPlugin):
 
                 # TODO: Call external banking API
                 # For now, mark as completed
-                await transaction_repo.update_status(created_txn.transaction_id, 'completed')
+                await transaction_repo.update_status(created_txn.id, 'completed')
 
                 return ExecutionResult(
                     success=True,
                     message=f'Chuyển {amount:,} VND thành công đến {recipient_info["name"]}',
                     data={
-                        'transaction_id': created_txn.transaction_id,
+                        'transaction_id': created_txn.id,
                         'amount': float(amount),
                         'recipient': recipient_info['name'],
                         'recipient_account': recipient_info.get('account_number'),
@@ -362,47 +416,24 @@ class SendMoneyPlugin(IntentPlugin):
         contact_repo,
         account_repo,
     ) -> Optional[Dict[str, Any]]:
-        """Resolve recipient from name/account number
+        """Resolve recipient from account number
 
         Returns:
         - For internal transfer: {'account_id': int, 'name': str}
         - For external transfer: {'account_number': str, 'name': str, 'bank': str}
+
+        Note: Contact repository is kept for future voice-input feature
+        where users can say contact names instead of account numbers.
         """
-        # Try to find in contacts first (by name)
-        contacts = await contact_repo.search_by_name(user_id, recipient)
-        if contacts:
-            contact = contacts[0]  # Take first match
-
-            # Check if it's an internal account
-            internal_account = await account_repo.get_by_account_number(contact.account_number)
-            if internal_account:
-                return {
-                    'account_id': int(internal_account.account_id),
-                    'name': contact.contact_name,
-                }
-            else:
-                return {
-                    'account_number': contact.account_number,
-                    'name': contact.contact_name,
-                    'bank': contact.bank_name,
-                }
-
-        # Try as account number
+        # Try to find account by account number (internal transfer)
         account = await account_repo.get_by_account_number(recipient)
         if account:
-            # Get account owner info
             return {
-                'account_id': int(account.account_id),
+                'account_id': int(account.id),
                 'name': account.account_name,
             }
 
-        # Try to find in contacts by account number
-        contact = await contact_repo.get_by_account_number(user_id, recipient)
-        if contact:
-            return {
-                'account_number': contact.account_number,
-                'name': contact.contact_name,
-                'bank': contact.bank_name,
-            }
-
+        # Not found in internal accounts - assume external transfer
+        # For now, return None to indicate recipient not found
+        # TODO: For voice input, search in contacts by name
         return None
