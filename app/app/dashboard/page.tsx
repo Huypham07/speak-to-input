@@ -2,8 +2,8 @@
 
 import { useAuth } from "@/lib/auth-context";
 import { useSidebar } from "@/lib/sidebar-context";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState, useRef } from "react";
 import { Navbar } from "@/components/layout/navbar";
 import { BalanceCard } from "@/components/dashboard/balance-card";
 import { StatisticsOverview } from "@/components/dashboard/statistics-overview";
@@ -44,10 +44,12 @@ export default function DashboardPage() {
   const { user, isLoading, logout } = useAuth();
   const { isCollapsed } = useSidebar();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [activeForm, setActiveForm] = useState<ActiveForm>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const { transcript } = useSpeech();
   const { addTransfer, addBill, addFund } = useFinancial();
+  const fundsSectionRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -74,6 +76,22 @@ export default function DashboardPage() {
     }
   }, [user]);
 
+  // Handle tab query parameter - scroll to funds section
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab === "funds" && fundsSectionRef.current) {
+      // Small delay to ensure DOM is ready
+      setTimeout(() => {
+        fundsSectionRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+        // Clean up URL - remove query param after scrolling
+        router.replace("/dashboard", { scroll: false });
+      }, 100);
+    }
+  }, [searchParams, router]);
+
   const handleCommandMatched = (commandId: string, data: Record<string, any>) => {
     switch (commandId) {
       case "transfer":
@@ -97,13 +115,13 @@ export default function DashboardPage() {
         break;
       case "fund":
         addFund({
-          name: data.name,
-          targetAmount: data.targetAmount,
-          currentAmount: data.currentAmount || 0,
-          description: data.description || "",
-          deadline: data.deadline,
-          category: data.category,
-          priority: data.priority || "medium",
+          fund_name: data.name || data.fund_name || "",
+          target_amount: data.targetAmount || data.target_amount || 0,
+          target_date: data.deadline || data.target_date || new Date().toISOString().split("T")[0],
+          initial_amount: data.currentAmount || data.initial_amount || 0,
+          monthly_contribution: data.monthly_contribution || 0,
+          category: data.category || "other",
+          notes: data.description || data.notes || "",
         });
         break;
     }
@@ -166,7 +184,9 @@ export default function DashboardPage() {
           </div>
 
           {/* Funds */}
-          <FundsList />
+          <div id="funds-section" ref={fundsSectionRef}>
+            <FundsList onCreateFund={() => setActiveForm("fund")} />
+          </div>
         </div>
       </main>
 

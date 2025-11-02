@@ -162,3 +162,72 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Sonner Toast Custom Styles */
+[data-sonner-toast] {
+  border-radius: 0.5rem !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+  background: var(--background) !important;
+  color: var(--foreground) !important;
+  padding: 0.75rem 1rem !important;
+  font-size: 0.875rem !important;
+  font-weight: 500 !important;
+}
+
+[data-sonner-toast][data-type="success"] {
+  background: rgb(145, 247, 227) !important;
+  color: rgb(4, 81, 88) !important;
+  border-color: rgb(5, 124, 188) !important;
+}
+
+.dark [data-sonner-toast][data-type="success"] {
+  background: rgb(2, 44, 34) !important;
+  color: rgb(209, 250, 229) !important;
+  border-color: rgb(6, 78, 59) !important;
+}
+
+[data-sonner-toast][data-type="error"] {
+  background: rgb(254, 242, 242) !important;
+  color: rgb(153, 27, 27) !important;
+  border-color: rgb(254, 202, 202) !important;
+}
+
+.dark [data-sonner-toast][data-type="error"] {
+  background: rgb(69, 10, 10) !important;
+  color: rgb(254, 226, 226) !important;
+  border-color: rgb(153, 27, 27) !important;
+}
+
+[data-sonner-toast][data-type="info"] {
+  background: rgb(239, 246, 255) !important;
+  color: rgb(30, 58, 138) !important;
+  border-color: rgb(191, 219, 254) !important;
+}
+
+.dark [data-sonner-toast][data-type="info"] {
+  background: rgb(23, 37, 84) !important;
+  color: rgb(191, 219, 254) !important;
+  border-color: rgb(30, 58, 138) !important;
+}
+
+[data-sonner-toast][data-type="warning"] {
+  background: rgb(254, 252, 232) !important;
+  color: rgb(113, 63, 18) !important;
+  border-color: rgb(254, 240, 138) !important;
+}
+
+.dark [data-sonner-toast][data-type="warning"] {
+  background: rgb(66, 32, 6) !important;
+  color: rgb(254, 249, 195) !important;
+  border-color: rgb(113, 63, 18) !important;
+}
+
+[data-sonner-toast] [data-title] {
+  color: inherit !important;
+}
+
+[data-sonner-toast] [data-description] {
+  color: inherit !important;
+  opacity: 0.9 !important;
+}

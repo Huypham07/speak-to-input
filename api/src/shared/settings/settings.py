@@ -36,7 +36,7 @@ class LLMSettings(BaseSettings):
     api_key: str = Field(default='', description='Google Gemini API key')
     model: str = Field(default='gemini-2.5-flash', description='Gemini model name')
     base_url: str = Field(default='https://generativelanguage.googleapis.com', description='Gemini API base URL')
-    
+
     class Config:
         env_prefix = 'LLM_'
 
