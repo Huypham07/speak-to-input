@@ -59,7 +59,7 @@ class IntentUnderstandingService:
         
         # Base prompt
         prompt_parts = [
-            "Bạn là trợ lý AI của VPBank, chuyên phân tích ý định của khách hàng từ lệnh giọng nói.\n",
+            "Bạn là trợ lý AI tài chính thông minh, chuyên phân tích ý định của khách hàng từ lệnh giọng nói.\n",
             "\nCÁC INTENT HỖ TRỢ:",
         ]
         
