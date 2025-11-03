@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
 import { toast } from "sonner";
 
@@ -220,7 +221,7 @@ export function FundForm({ onSuccess }: { onSuccess: () => void }) {
   };
 
   return (
-    <>
+    <div className="space-y-4">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
@@ -237,7 +238,7 @@ export function FundForm({ onSuccess }: { onSuccess: () => void }) {
           </div>
           <div className="space-y-2">
             <Label htmlFor="category">Danh mục</Label>
-            <select
+            <Select
               id="category"
               value={formData.category}
               onChange={(e) => setFormData({ ...formData, category: e.target.value })}
@@ -247,7 +248,7 @@ export function FundForm({ onSuccess }: { onSuccess: () => void }) {
                   {cat.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -352,11 +353,11 @@ export function FundForm({ onSuccess }: { onSuccess: () => void }) {
           />
         </div>
         <div className="rounded-b-xl sm:rounded-b-2xl sticky bottom-0 left-0 right-0 bg-background border-t pt-4 -mx-4 sm:-mx-6 px-4 sm:px-6 pb-4 shadow-lg z-10">
-          <Button type="submit" form="fund-form" className="w-full" disabled={isLoading}>
+          <Button type="submit" className="w-full" disabled={isLoading}>
             {isLoading ? "Đang tạo..." : "Tạo quỹ tiết kiệm"}
           </Button>
         </div>
       </form>
-    </>
+    </div>
   );
 }
