@@ -28,7 +28,7 @@ export function Navbar() {
     { href: "/dashboard", icon: Home, label: "Trang chủ" },
     { href: "/accounts?action=transfer", icon: Send, label: "Chuyển tiền" },
     { href: "/dashboard?tab=bills", icon: FileText, label: "Hóa đơn" },
-    { href: "/dashboard?tab=funds", icon: PiggyBank, label: "Tiết kiệm" },
+    { href: "/funds", icon: PiggyBank, label: "Tiết kiệm" },
   ];
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href);

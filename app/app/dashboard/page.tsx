@@ -2,22 +2,17 @@
 
 import { useAuth } from "@/lib/auth-context";
 import { useSidebar } from "@/lib/sidebar-context";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { Navbar } from "@/components/layout/navbar";
 import { BalanceCard } from "@/components/dashboard/balance-card";
 import { StatisticsOverview } from "@/components/dashboard/statistics-overview";
 import { TransfersList } from "@/components/dashboard/transfers-list";
 import { BillsList } from "@/components/dashboard/bills-list";
 import { FundsList } from "@/components/dashboard/funds-list";
-import { TransferForm } from "@/components/financial/transfer-form";
-import { BillForm } from "@/components/financial/bill-form";
-import { FundForm } from "@/components/financial/fund-form";
 import { SpeechResultModal } from "@/components/speech/speech-result-modal";
 import { useSpeech } from "@/lib/speech-context";
 import { useFinancial } from "@/lib/financial-context";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { Settings, User, LogOut } from "lucide-react";
 import {
   DropdownMenu,
@@ -28,69 +23,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-type ActiveForm = "transfer" | "bill" | "fund" | null;
-
-interface Account {
-  id: number;
-  account_number: string;
-  account_name: string;
-  balance: number;
-  currency: string;
-  account_type: string;
-  is_active: boolean;
-}
-
 export default function DashboardPage() {
   const { user, isLoading, logout } = useAuth();
   const { isCollapsed } = useSidebar();
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const [activeForm, setActiveForm] = useState<ActiveForm>(null);
-  const [accounts, setAccounts] = useState<Account[]>([]);
   const { transcript } = useSpeech();
   const { addTransfer, addBill, addFund } = useFinancial();
-  const fundsSectionRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!isLoading && !user) {
       router.push("/login");
     }
   }, [user, isLoading, router]);
-
-  // Fetch accounts for transfer form
-  useEffect(() => {
-    const fetchAccounts = async () => {
-      try {
-        const response = await fetch("/api/accounts");
-        if (response.ok) {
-          const data = await response.json();
-          setAccounts(data);
-        }
-      } catch (error) {
-        console.error("Error fetching accounts:", error);
-      }
-    };
-
-    if (user) {
-      fetchAccounts();
-    }
-  }, [user]);
-
-  // Handle tab query parameter - scroll to funds section
-  useEffect(() => {
-    const tab = searchParams.get("tab");
-    if (tab === "funds" && fundsSectionRef.current) {
-      // Small delay to ensure DOM is ready
-      setTimeout(() => {
-        fundsSectionRef.current?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
-        // Clean up URL - remove query param after scrolling
-        router.replace("/dashboard", { scroll: false });
-      }, 100);
-    }
-  }, [searchParams, router]);
 
   const handleCommandMatched = (commandId: string, data: Record<string, any>) => {
     switch (commandId) {
@@ -184,35 +128,9 @@ export default function DashboardPage() {
           </div>
 
           {/* Funds */}
-          <div id="funds-section" ref={fundsSectionRef}>
-            <FundsList onCreateFund={() => setActiveForm("fund")} />
-          </div>
+          <FundsList />
         </div>
       </main>
-
-      {/* Forms Modal */}
-      <Dialog open={activeForm !== null} onOpenChange={(open) => !open && setActiveForm(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {activeForm === "transfer"
-                ? "Chuyển tiền"
-                : activeForm === "bill"
-                ? "Tạo hóa đơn chi tiêu"
-                : "Tạo quỹ tiết kiệm"}
-            </DialogTitle>
-          </DialogHeader>
-          {activeForm === "transfer" && accounts.length > 0 && (
-            <TransferForm
-              accountId={accounts[0].id}
-              currentBalance={accounts[0].balance}
-              onSuccess={() => setActiveForm(null)}
-            />
-          )}
-          {activeForm === "bill" && <BillForm onSuccess={() => setActiveForm(null)} />}
-          {activeForm === "fund" && <FundForm onSuccess={() => setActiveForm(null)} />}
-        </DialogContent>
-      </Dialog>
 
       {transcript && <SpeechResultModal onCommandMatched={handleCommandMatched} onClose={() => {}} />}
     </div>
