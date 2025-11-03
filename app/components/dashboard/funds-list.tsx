@@ -38,9 +38,23 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
   });
   const [amount, setAmount] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
-  const [selectedFund, setSelectedFund] = useState<{ id: number; current_amount: number; target_amount: number; fund_name: string } | null>(null);
-  const [selectedFundForWithdraw, setSelectedFundForWithdraw] = useState<{ id: number; current_amount: number; target_amount: number; fund_name: string } | null>(null);
-  const [deleteConfirmDialog, setDeleteConfirmDialog] = useState<{ open: boolean; fundId: number | null; fundName: string }>({
+  const [selectedFund, setSelectedFund] = useState<{
+    id: number;
+    current_amount: number;
+    target_amount: number;
+    fund_name: string;
+  } | null>(null);
+  const [selectedFundForWithdraw, setSelectedFundForWithdraw] = useState<{
+    id: number;
+    current_amount: number;
+    target_amount: number;
+    fund_name: string;
+  } | null>(null);
+  const [deleteConfirmDialog, setDeleteConfirmDialog] = useState<{
+    open: boolean;
+    fundId: number | null;
+    fundName: string;
+  }>({
     open: false,
     fundId: null,
     fundName: "",
@@ -62,11 +76,29 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "active":
-        return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-400">Đang hoạt động</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-400">
+            Đang hoạt động
+          </Badge>
+        );
       case "completed":
-        return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-400">Hoàn thành</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-400">
+            Hoàn thành
+          </Badge>
+        );
       case "cancelled":
-        return <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-950 dark:text-gray-400">Đã hủy</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-950 dark:text-gray-400">
+            Đã hủy
+          </Badge>
+        );
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -82,7 +114,9 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
     const newTotal = selectedFund.current_amount + depositAmount;
     if (newTotal > selectedFund.target_amount) {
       toast.error(
-        `Không thể nạp vượt quá số tiền mục tiêu. Số tiền tối đa có thể nạp: ${(selectedFund.target_amount - selectedFund.current_amount).toLocaleString("vi-VN")} VND`
+        `Không thể nạp vượt quá số tiền mục tiêu. Số tiền tối đa có thể nạp: ${(
+          selectedFund.target_amount - selectedFund.current_amount
+        ).toLocaleString("vi-VN")} VND`
       );
       return;
     }
@@ -90,9 +124,12 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
     setIsProcessing(true);
     try {
       await depositToFund(depositDialog.fundId, depositAmount);
-      toast.success(`Đã nạp ${depositAmount.toLocaleString("vi-VN")} VND thành công vào quỹ ${selectedFund.fund_name}`, {
-        duration: 3000,
-      });
+      toast.success(
+        `Đã nạp ${depositAmount.toLocaleString("vi-VN")} VND thành công vào quỹ ${selectedFund.fund_name}`,
+        {
+          duration: 3000,
+        }
+      );
       setDepositDialog({ open: false, fundId: null });
       setAmount("");
       setSelectedFund(null);
@@ -115,7 +152,9 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
     // Validate: không cho rút nhiều hơn số tiền trong quỹ
     if (withdrawAmount > selectedFundForWithdraw.current_amount) {
       toast.error(
-        `Không thể rút vượt quá số tiền hiện có. Số tiền tối đa có thể rút: ${selectedFundForWithdraw.current_amount.toLocaleString("vi-VN")} VND`,
+        `Không thể rút vượt quá số tiền hiện có. Số tiền tối đa có thể rút: ${selectedFundForWithdraw.current_amount.toLocaleString(
+          "vi-VN"
+        )} VND`,
         {
           duration: 4000,
         }
@@ -133,9 +172,12 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
     setIsProcessing(true);
     try {
       await withdrawFromFund(withdrawDialog.fundId, withdrawAmount);
-      toast.success(`Đã rút ${withdrawAmount.toLocaleString("vi-VN")} VND thành công từ quỹ ${selectedFundForWithdraw.fund_name}`, {
-        duration: 3000,
-      });
+      toast.success(
+        `Đã rút ${withdrawAmount.toLocaleString("vi-VN")} VND thành công từ quỹ ${selectedFundForWithdraw.fund_name}`,
+        {
+          duration: 3000,
+        }
+      );
       setWithdrawDialog({ open: false, fundId: null });
       setAmount("");
       setSelectedFundForWithdraw(null);
@@ -153,7 +195,9 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
     // Kiểm tra nếu quỹ còn tiền
     if (currentAmount > 0) {
       toast.error(
-        `Quỹ "${fundName}" vẫn còn ${currentAmount.toLocaleString("vi-VN")} VND. Vui lòng rút hết tiền trước khi xóa quỹ.`,
+        `Quỹ "${fundName}" vẫn còn ${currentAmount.toLocaleString(
+          "vi-VN"
+        )} VND. Vui lòng rút hết tiền trước khi xóa quỹ.`,
         {
           duration: 5000,
         }
@@ -271,7 +315,7 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
                     </div>
                     <div className="w-full bg-muted rounded-full h-2">
                       <div
-                        className="bg-gradient-to-r from-emerald-500 to-emerald-600 h-2 rounded-full transition-all"
+                        className="bg-linear-to-r from-emerald-500 to-emerald-600 h-2 rounded-full transition-all"
                         style={{ width: `${Math.min(progress, 100)}%` }}
                       />
                     </div>
@@ -335,7 +379,7 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
             setSelectedFund(null);
           }
         }}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl w-[95vw] sm:w-full rounded-xl sm:rounded-2xl">
           <DialogHeader>
             <DialogTitle>Nạp tiền vào quỹ</DialogTitle>
             <DialogDescription>
@@ -365,8 +409,7 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
               />
               {selectedFund && amount && !isNaN(parseFloat(amount)) && (
                 <p className="text-xs text-muted-foreground">
-                  Sau khi nạp:{" "}
-                  {(selectedFund.current_amount + parseFloat(amount)).toLocaleString("vi-VN")} VND /{" "}
+                  Sau khi nạp: {(selectedFund.current_amount + parseFloat(amount)).toLocaleString("vi-VN")} VND /{" "}
                   {selectedFund.target_amount.toLocaleString("vi-VN")} VND
                   {selectedFund.current_amount + parseFloat(amount) > selectedFund.target_amount && (
                     <span className="text-red-500 ml-2">(Vượt quá mục tiêu!)</span>
@@ -438,8 +481,8 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
               />
               {selectedFundForWithdraw && amount && !isNaN(parseFloat(amount)) && (
                 <p className="text-xs text-muted-foreground">
-                  Sau khi rút:{" "}
-                  {(selectedFundForWithdraw.current_amount - parseFloat(amount)).toLocaleString("vi-VN")} VND
+                  Sau khi rút: {(selectedFundForWithdraw.current_amount - parseFloat(amount)).toLocaleString("vi-VN")}{" "}
+                  VND
                   {parseFloat(amount) > selectedFundForWithdraw.current_amount && (
                     <span className="text-red-500 ml-2">(Vượt quá số tiền hiện có!)</span>
                   )}
@@ -463,8 +506,7 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
                   !amount ||
                   isProcessing ||
                   parseFloat(amount) <= 0 ||
-                  (selectedFundForWithdraw !== null &&
-                    parseFloat(amount) > selectedFundForWithdraw.current_amount)
+                  (selectedFundForWithdraw !== null && parseFloat(amount) > selectedFundForWithdraw.current_amount)
                 }>
                 {isProcessing ? "Đang xử lý..." : "Rút tiền"}
               </Button>
@@ -492,9 +534,7 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Hủy</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteConfirm}
-              className="bg-red-600 hover:bg-red-700 focus:ring-red-600">
+            <AlertDialogAction onClick={handleDeleteConfirm} className="bg-red-600 hover:bg-red-700 focus:ring-red-600">
               Xóa quỹ
             </AlertDialogAction>
           </AlertDialogFooter>
