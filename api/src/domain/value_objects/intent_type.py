@@ -12,6 +12,9 @@ class IntentType(str, Enum):
     # Financial management intents
     CREATE_BILL = 'CREATE_BILL'
     CREATE_FUND = 'CREATE_FUND'
+    DEPOSIT_FUND = 'DEPOSIT_FUND'
+    WITHDRAW_FUND = 'WITHDRAW_FUND'
+    DELETE_FUND = 'DELETE_FUND'
 
     # Query intents
     CHECK_BALANCE = 'CHECK_BALANCE'
