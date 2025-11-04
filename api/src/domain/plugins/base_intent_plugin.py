@@ -4,18 +4,14 @@ from abc import ABC
 from abc import abstractmethod
 from typing import Any
 from typing import Dict
-from typing import List
 
-from domain.entities import BusinessState
-from domain.entities import Capability
 from domain.entities import ExecutionResult
-from domain.entities import ValidationResult
 
 
 class IntentPlugin(ABC):
     """
     Base class for all intent plugins.
-    Each intent is a self-contained plugin with all its logic.
+    Simplified for direct execution with inline validation.
 
     To add a new intent:
     1. Create a new file: {intent_name}_plugin.py
@@ -51,52 +47,6 @@ class IntentPlugin(ABC):
         """
         pass
 
-    # ========== Validation ==========
-
-    @abstractmethod
-    def validate_parameters(
-        self,
-        parameters: Dict[str, Any],
-        context: Dict[str, Any],
-    ) -> ValidationResult:
-        """
-        Validate extracted parameters.
-
-        Args:
-            parameters: Extracted parameters from intent understanding
-            context: Current context (user data, state, etc.)
-
-        Returns:
-            ValidationResult with field-level validations
-        """
-        pass
-
-    # ========== Capability Resolution ==========
-
-    @abstractmethod
-    def resolve_capabilities(
-        self,
-        parameters: Dict[str, Any],
-        validation_result: ValidationResult,
-        state: BusinessState,
-    ) -> List[Capability]:
-        """
-        Determine what capabilities frontend needs to execute.
-
-        This is where business logic maps to frontend actions.
-
-        Args:
-            parameters: Current parameters
-            validation_result: Result from validate_parameters
-            state: Current business state
-
-        Returns:
-            List of capabilities for frontend to execute
-        """
-        pass
-
-    # ========== State Machine ==========
-
     # ========== Execution ==========
 
     @abstractmethod
@@ -106,12 +56,14 @@ class IntentPlugin(ABC):
         context: Dict[str, Any],
     ) -> ExecutionResult:
         """
-        Execute the intent action.
-        Called only after validation and confirmation (if needed).
+        Execute the intent action with inline validation.
+
+        Validates parameters and executes immediately.
+        Returns clear errors if validation fails.
 
         Args:
-            parameters: Validated parameters
-            context: Current context
+            parameters: Parameters for execution
+            context: Context including user_id and repositories
 
         Returns:
             ExecutionResult with success/failure and data

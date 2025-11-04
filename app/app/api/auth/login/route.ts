@@ -22,11 +22,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: data.detail || "Login failed" }, { status: response.status });
     }
 
-    // Return token and user info
-    return NextResponse.json({
+    // Create response with token
+    const nextResponse = NextResponse.json({
       access_token: data.access_token,
       token_type: data.token_type,
     });
+
+    // Forward the Set-Cookie header from backend
+    const setCookieHeader = response.headers.get("set-cookie");
+    if (setCookieHeader) {
+      nextResponse.headers.set("Set-Cookie", setCookieHeader);
+    }
+
+    return nextResponse;
   } catch (error) {
     console.error("Login error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

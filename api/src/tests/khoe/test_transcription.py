@@ -4,7 +4,7 @@ import base64
 import time
 
 import pytest
-from application.services.voice_service import VoiceService
+from application.services import VoiceService
 from shared.settings import Settings
 
 
@@ -30,5 +30,5 @@ async def test_speech_to_text_from_file():
     assert isinstance(text, str)
     assert isinstance(confidence, float)
     assert confidence > 0.0
-    print(f"✅ Output text: {text}")
+    print(f'✅ Output text: {text}')
 # $env:PYTHONPATH="api/src"; pytest -v -s --maxfail=1 --disable-warnings

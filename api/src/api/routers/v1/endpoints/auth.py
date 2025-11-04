@@ -7,8 +7,10 @@ from api.dependencies import get_user_repository
 from api.helpers.dependencies import get_current_user
 from api.helpers.jwt_auth import ACCESS_TOKEN_EXPIRE_MINUTES
 from api.helpers.jwt_auth import create_access_token
+from api.helpers.jwt_auth import create_refresh_token
+from api.helpers.jwt_auth import decode_access_token
 from api.helpers.jwt_auth import get_password_hash
-from api.helpers.jwt_auth import Token
+from api.helpers.jwt_auth import REFRESH_TOKEN_EXPIRE_DAYS
 from api.helpers.jwt_auth import TokenData
 from api.helpers.jwt_auth import verify_password
 from api.schemas import LoginRequest
@@ -19,7 +21,9 @@ from domain.entities import User
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
+from fastapi import Request
 from fastapi import status
+from fastapi.responses import JSONResponse
 from infra.db.repositories import AccountRepository
 from infra.db.repositories import UserRepository
 from shared.utils import generate_account_number
@@ -27,7 +31,7 @@ from shared.utils import generate_account_number
 router = APIRouter(prefix='/auth', tags=['Authentication'])
 
 
-@router.post('/login', response_model=Token)
+@router.post('/login')
 async def login(
     request: LoginRequest,
     user_repo: UserRepository = Depends(get_user_repository),
@@ -74,7 +78,42 @@ async def login(
         expires_delta=access_token_expires,
     )
 
-    return Token(access_token=access_token, token_type='bearer')
+    # Create refresh token
+    refresh_token_expires = timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    refresh_token = create_refresh_token(
+        data={'sub': user.username, 'user_id': str(user.id)},
+        expires_delta=refresh_token_expires,
+    )
+
+    # Create response with httpOnly cookie
+    response = JSONResponse(
+        content={
+            'access_token': access_token,
+            'token_type': 'bearer',
+        },
+    )
+
+    # Set httpOnly cookie for access token
+    response.set_cookie(
+        key='access_token',
+        value=access_token,
+        httponly=True,
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,  # Convert to seconds
+        path='/',
+        samesite='lax',  # Allows cookie to be sent with top-level navigations
+    )
+
+    # Set httpOnly cookie for refresh token
+    response.set_cookie(
+        key='refresh_token',
+        value=refresh_token,
+        httponly=True,
+        max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,  # Convert to seconds
+        path='/',
+        samesite='lax',
+    )
+
+    return response
 
 
 @router.post('/register', response_model=UserResponse)
@@ -153,13 +192,64 @@ async def get_current_user_info(
     return UserResponse.model_validate(user)
 
 
-@router.post('/refresh', response_model=Token)
-async def refresh_token(current_user: TokenData = Depends(get_current_user)):
+@router.post('/refresh')
+async def refresh_token(request: Request):
+    """
+    Refresh access token using refresh token from httpOnly cookie.
+    Does NOT require valid access token - only refresh token.
+    """
+    # Get refresh token from cookie
+    refresh_token = request.cookies.get('refresh_token')
 
+    if not refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail='Refresh token not found',
+        )
+
+    # Decode and validate refresh token
+    token_data = decode_access_token(refresh_token)
+
+    if not token_data:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail='Invalid refresh token',
+        )
+
+    # Create new access token
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={'sub': current_user.username, 'user_id': current_user.user_id},
+        data={'sub': token_data.username, 'user_id': token_data.user_id},
         expires_delta=access_token_expires,
     )
 
-    return Token(access_token=access_token, token_type='bearer')
+    # Create response with new access token
+    response = JSONResponse(
+        content={
+            'access_token': access_token,
+            'token_type': 'bearer',
+        },
+    )
+
+    # Update httpOnly cookie with new access token
+    response.set_cookie(
+        key='access_token',
+        value=access_token,
+        httponly=True,
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        path='/',
+        samesite='lax',
+    )
+
+    return response
+
+
+@router.post('/logout')
+async def logout():
+    """
+    Logout endpoint - clears both access and refresh token httpOnly cookies.
+    """
+    response = JSONResponse(content={'message': 'Logged out successfully'})
+    response.delete_cookie(key='access_token', path='/')
+    response.delete_cookie(key='refresh_token', path='/')
+    return response

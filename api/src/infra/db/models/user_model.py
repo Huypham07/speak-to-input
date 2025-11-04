@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import Boolean
 from sqlalchemy import DateTime
+from sqlalchemy import Numeric
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
@@ -85,9 +87,10 @@ class AccountModel(BaseModel):
     )
 
     # Balance
-    balance: Mapped[float] = mapped_column(
+    balance: Mapped[Decimal] = mapped_column(
+        Numeric(precision=15, scale=2),
         nullable=False,
-        default=0.0,
+        default=Decimal('0.00'),
     )
     currency: Mapped[str] = mapped_column(
         String(10),

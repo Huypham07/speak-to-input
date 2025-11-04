@@ -8,7 +8,6 @@ from infra.db.repositories import AccountRepository
 from infra.db.repositories import BillRepository
 from infra.db.repositories import ContactRepository
 from infra.db.repositories import SavingsFundRepository
-from infra.db.repositories import SessionRepository
 from infra.db.repositories import TransactionRepository
 from infra.db.repositories import UserRepository
 from shared.logging import get_logger
@@ -32,7 +31,6 @@ class InfrastructureManager:
         self._postgres: Optional[PostgresConnection] = None
 
         # Repositories
-        self._session_repository: Optional[SessionRepository] = None
         self._user_repository: Optional[UserRepository] = None
         self._account_repository: Optional[AccountRepository] = None
         self._contact_repository: Optional[ContactRepository] = None
@@ -71,7 +69,6 @@ class InfrastructureManager:
             raise RuntimeError('PostgreSQL connection is not initialized')
         session_factory = self._postgres.get_session
 
-        self._session_repository = SessionRepository(session_factory)
         self._user_repository = UserRepository(session_factory)
         self._account_repository = AccountRepository(session_factory)
         self._contact_repository = ContactRepository(session_factory)
@@ -98,14 +95,6 @@ class InfrastructureManager:
         if not self._postgres:
             raise RuntimeError('PostgreSQL not initialized')
         return self._postgres
-
-    # Repositories
-    @property
-    def session_repository(self) -> SessionRepository:
-        """Get Session repository"""
-        if not self._session_repository:
-            raise RuntimeError('SessionRepository not initialized')
-        return self._session_repository
 
     @property
     def user_repository(self) -> UserRepository:

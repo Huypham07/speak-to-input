@@ -33,13 +33,17 @@ class PostgresSettings(BaseSettings):
 
 
 class LLMSettings(BaseSettings):
+    api_key: str = Field(default='', description='Google Gemini API key')
+    model: str = Field(default='gemini-2.5-flash', description='Gemini model name')
+    base_url: str = Field(default='https://generativelanguage.googleapis.com', description='Gemini API base URL')
+
     class Config:
         env_prefix = 'LLM_'
 
 
 class WhisperSettings(BaseSettings):
     host: str = Field(default='http://localhost')
-    port: str = Field(default='8080')
+    port: int = Field(default=8080)
 
     class Config:
         env_prefix = 'WHISPER_'
@@ -49,6 +53,7 @@ class Settings(BaseSettings):
     postgres: PostgresSettings = Field(default_factory=PostgresSettings)
     secret_key: str = Field('secret_key', description='Secret key for JWT and other security operations')
     whisper: WhisperSettings = Field(default_factory=WhisperSettings)
+    llm: LLMSettings = Field(default_factory=LLMSettings)
 
     class Config:
         env_nested_delimiter = '__'

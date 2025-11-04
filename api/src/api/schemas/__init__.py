@@ -16,6 +16,19 @@ from .financial_schema import FundResponse
 from .financial_schema import FundWithdrawRequest
 from .financial_schema import TransferRequest
 from .financial_schema import TransferResponse
+from .voice_schema import VoiceAudioAckResponse
+from .voice_schema import VoiceAudioChunkMessage
+from .voice_schema import VoiceConfirmationRequiredResponse
+from .voice_schema import VoiceConfirmMessage
+from .voice_schema import VoiceConnectedResponse
+from .voice_schema import VoiceErrorResponse
+from .voice_schema import VoiceExecuteMessage
+from .voice_schema import VoiceExecutionErrorResponse
+from .voice_schema import VoiceExecutionSuccessResponse
+from .voice_schema import VoiceInitAckResponse
+from .voice_schema import VoiceInitMessage
+from .voice_schema import VoicePingMessage
+from .voice_schema import VoicePongResponse
 
 __all__ = [
     # Auth
@@ -37,4 +50,18 @@ __all__ = [
     'FundDepositRequest',
     'FundWithdrawRequest',
     'ContactResponse',
+    # Voice
+    'VoiceInitMessage',
+    'VoiceAudioChunkMessage',
+    'VoiceExecuteMessage',
+    'VoiceConfirmMessage',
+    'VoicePingMessage',
+    'VoiceConnectedResponse',
+    'VoiceInitAckResponse',
+    'VoiceAudioAckResponse',
+    'VoiceConfirmationRequiredResponse',
+    'VoiceExecutionSuccessResponse',
+    'VoiceExecutionErrorResponse',
+    'VoiceErrorResponse',
+    'VoicePongResponse',
 ]

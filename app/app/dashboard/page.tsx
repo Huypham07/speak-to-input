@@ -10,14 +10,11 @@ import { StatisticsOverview } from "@/components/dashboard/statistics-overview";
 import { TransfersList } from "@/components/dashboard/transfers-list";
 import { BillsList } from "@/components/dashboard/bills-list";
 import { FundsList } from "@/components/dashboard/funds-list";
-import { TransferForm } from "@/components/financial/transfer-form";
-import { BillForm } from "@/components/financial/bill-form";
 import { FundForm } from "@/components/financial/fund-form";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SpeechResultModal } from "@/components/speech/speech-result-modal";
 import { useSpeech } from "@/lib/speech-context";
 import { useFinancial } from "@/lib/financial-context";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { Settings, User, LogOut } from "lucide-react";
 import {
   DropdownMenu,
@@ -28,21 +25,19 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-type ActiveForm = "transfer" | "bill" | "fund" | null;
-
 export default function DashboardPage() {
-  const { user, logout } = useAuth();
+  const { user, isLoading, logout } = useAuth();
   const { isCollapsed } = useSidebar();
   const router = useRouter();
-  const [activeForm, setActiveForm] = useState<ActiveForm>(null);
   const { transcript } = useSpeech();
   const { addTransfer, addBill, addFund } = useFinancial();
+  const [isCreatingFund, setIsCreatingFund] = useState(false);
 
   useEffect(() => {
-    if (!user) {
+    if (!isLoading && !user) {
       router.push("/login");
     }
-  }, [user, router]);
+  }, [user, isLoading, router]);
 
   const handleCommandMatched = (commandId: string, data: Record<string, any>) => {
     switch (commandId) {
@@ -67,13 +62,13 @@ export default function DashboardPage() {
         break;
       case "fund":
         addFund({
-          name: data.name,
-          targetAmount: data.targetAmount,
-          currentAmount: data.currentAmount || 0,
-          description: data.description || "",
-          deadline: data.deadline,
-          category: data.category,
-          priority: data.priority || "medium",
+          fund_name: data.name || data.fund_name || "",
+          target_amount: data.targetAmount || data.target_amount || 0,
+          target_date: data.deadline || data.target_date || new Date().toISOString().split("T")[0],
+          initial_amount: data.currentAmount || data.initial_amount || 0,
+          monthly_contribution: data.monthly_contribution || 0,
+          category: data.category || "other",
+          notes: data.description || data.notes || "",
         });
         break;
     }
@@ -136,25 +131,19 @@ export default function DashboardPage() {
           </div>
 
           {/* Funds */}
-          <FundsList />
+          <FundsList onCreateFund={() => setIsCreatingFund(true)} />
         </div>
       </main>
 
-      {/* Forms Modal */}
-      <Dialog open={activeForm !== null} onOpenChange={(open) => !open && setActiveForm(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {activeForm === "transfer"
-                ? "Chuyển tiền"
-                : activeForm === "bill"
-                ? "Tạo hóa đơn chi tiêu"
-                : "Tạo quỹ tiết kiệm"}
-            </DialogTitle>
+      {/* Create Fund Modal */}
+      <Dialog open={isCreatingFund} onOpenChange={setIsCreatingFund}>
+        <DialogContent className="max-w-2xl w-[95vw] sm:w-full max-h-[85vh] sm:max-h-[90vh] flex flex-col p-0 rounded-xl sm:rounded-2xl gap-0">
+          <DialogHeader className="px-4 sm:px-6 pt-4 sm:pt-6 pb-3 sm:pb-4 border-b shrink-0">
+            <DialogTitle className="text-lg sm:text-xl">Tạo quỹ tiết kiệm</DialogTitle>
           </DialogHeader>
-          {activeForm === "transfer" && <TransferForm onSuccess={() => setActiveForm(null)} />}
-          {activeForm === "bill" && <BillForm onSuccess={() => setActiveForm(null)} />}
-          {activeForm === "fund" && <FundForm onSuccess={() => setActiveForm(null)} />}
+          <div className="overflow-y-auto flex-1 px-4 sm:px-6 pt-3 sm:pt-4">
+            <FundForm onSuccess={() => setIsCreatingFund(false)} />
+          </div>
         </DialogContent>
       </Dialog>
 

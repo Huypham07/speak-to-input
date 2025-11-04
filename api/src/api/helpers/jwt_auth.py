@@ -16,6 +16,7 @@ settings = get_settings()
 SECRET_KEY = settings.secret_key
 ALGORITHM = 'HS256'
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
+REFRESH_TOKEN_EXPIRE_DAYS = 7  # Refresh token lasts 7 days
 
 pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
 
@@ -66,6 +67,30 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return encoded_jwt
 
 
+def create_refresh_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    """
+    Create a JWT refresh token.
+
+    Args:
+        data: Data to encode in the token (should include 'sub' for user identifier)
+        expires_delta: Token expiration time delta
+
+    Returns:
+        Encoded JWT refresh token string
+    """
+    to_encode = data.copy()
+
+    if expires_delta:
+        expire = datetime.now() + expires_delta
+    else:
+        expire = datetime.now() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+
+    to_encode.update({'exp': expire, 'type': 'refresh'})  # Mark as refresh token
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+    return encoded_jwt
+
+
 def decode_access_token(token: str) -> Optional[TokenData]:
     """
     Decode and verify a JWT token.
@@ -88,3 +113,31 @@ def decode_access_token(token: str) -> Optional[TokenData]:
 
     except JWTError:
         return None
+
+
+def verify_token(token: str) -> TokenData:
+    """
+    Verify JWT token and return TokenData.
+    Raises exception if token is invalid.
+
+    Args:
+        token: JWT token string
+
+    Returns:
+        TokenData if valid
+
+    Raises:
+        ValueError: If token is invalid or expired
+    """
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get('sub')
+        user_id: str = payload.get('user_id')
+
+        if username is None or user_id is None:
+            raise ValueError('Invalid token payload')
+
+        return TokenData(username=username, user_id=user_id)
+
+    except JWTError as e:
+        raise ValueError(f'Invalid or expired token: {str(e)}')

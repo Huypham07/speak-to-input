@@ -4,16 +4,16 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        build-essential \
-        cmake \
-        git \
-        wget \
-        curl \
-        ca-certificates \
-        python3 \
-        python3-pip \
-        ffmpeg \
-        && rm -rf /var/lib/apt/lists/*
+    build-essential \
+    cmake \
+    git \
+    wget \
+    curl \
+    ca-certificates \
+    python3 \
+    python3-pip \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt
 RUN git clone https://github.com/ggerganov/whisper.cpp.git

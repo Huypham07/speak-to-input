@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal
 from typing import List
 
 from api.dependencies import get_account_repository
+from api.dependencies import get_transaction_repository
 from api.helpers.dependencies import get_current_user
 from api.helpers.jwt_auth import TokenData
 from api.schemas import AccountResponse
@@ -11,11 +13,13 @@ from api.schemas import DepositRequest
 from api.schemas import TransactionResponse
 from api.schemas import WithdrawRequest
 from domain.entities import Account
+from domain.entities.transaction import Transaction
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import status
 from infra.db.repositories import AccountRepository
+from infra.db.repositories import TransactionRepository
 from pydantic import BaseModel
 from pydantic import Field
 from shared.utils import generate_account_number
@@ -39,7 +43,6 @@ async def create_account(
     """
     Create a new account for current user.
     Account number will be auto-generated.
-    Requires authentication.
     """
     user_id = int(current_user.user_id)
 
@@ -74,7 +77,6 @@ async def list_accounts(
 ):
     """
     List all accounts for current user.
-    Requires authentication.
     """
     accounts = await account_repo.get_by_user_id(int(current_user.user_id))
 
@@ -82,6 +84,45 @@ async def list_accounts(
         AccountResponse.model_validate(acc)
         for acc in accounts
     ]
+
+
+@router.get('/transactions', response_model=List[TransactionResponse])
+async def get_transactions(
+    current_user: TokenData = Depends(get_current_user),
+    transaction_repo: TransactionRepository = Depends(get_transaction_repository),
+    limit: int = 50,
+):
+    """
+    Get transaction history for the current user.
+    """
+    try:
+        transactions = await transaction_repo.get_by_user_id(int(current_user.user_id))
+
+        # Convert to response format
+        return [
+            TransactionResponse(
+                id=txn.id,
+                user_id=txn.user_id,
+                from_account_id=txn.from_account_id,
+                to_account_id=txn.to_account_id,
+                transaction_type=txn.transaction_type,
+                amount=float(txn.amount),
+                currency=txn.currency,
+                status=txn.status,
+                message=txn.message,
+                recipient_account_number=txn.recipient_account_number,
+                recipient_name=txn.recipient_name,
+                recipient_bank=txn.recipient_bank,
+                created_at=txn.created_at.isoformat() if txn.created_at else datetime.now().isoformat(),
+                updated_at=txn.updated_at.isoformat() if txn.updated_at else None,
+            )
+            for txn in transactions[:limit]
+        ]
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f'Failed to fetch transactions: {str(e)}',
+        )
 
 
 @router.get('/{account_id}', response_model=AccountResponse)
@@ -92,7 +133,6 @@ async def get_account(
 ):
     """
     Get account details.
-    Requires authentication.
     """
     account = await account_repo.read_by_id(account_id)
 
@@ -118,10 +158,10 @@ async def deposit_to_account(
     request: DepositRequest,
     current_user: TokenData = Depends(get_current_user),
     account_repo: AccountRepository = Depends(get_account_repository),
+    transaction_repo: TransactionRepository = Depends(get_transaction_repository),
 ):
     """
-    Deposit money to account (Top-up/Nạp tiền).
-    Requires authentication.
+    Deposit money to account (Nạp tiền).
     """
     account = await account_repo.read_by_id(account_id)
 
@@ -140,22 +180,40 @@ async def deposit_to_account(
 
     # Update balance
     try:
-        updated_account = await account_repo.update_balance(
+        await account_repo.update_balance(
             int(account_id),
             Decimal(str(request.amount)),
             operation='add',
         )
 
-        # TODO: Create transaction record in transaction history
+        # Create transaction record
+        transaction = Transaction(
+            user_id=int(current_user.user_id),
+            from_account_id=None,  # No source for deposit
+            to_account_id=int(account_id),
+            transaction_type='deposit',
+            amount=Decimal(str(request.amount)),
+            currency='VND',
+            message=request.note,
+            status='completed',
+        )
+        created_txn = await transaction_repo.create(transaction)
 
         return TransactionResponse(
-            transaction_id=f'txn_{account_id}_{int(updated_account.updated_at.timestamp())}',
-            account_id=updated_account.id,
+            id=created_txn.id,
+            user_id=int(current_user.user_id),
+            from_account_id=None,
+            to_account_id=int(account_id),
             transaction_type='deposit',
             amount=float(request.amount),
-            balance_after=float(updated_account.balance),
-            note=request.note,
-            created_at=updated_account.updated_at.isoformat(),
+            currency='VND',
+            status='completed',
+            message=request.note,
+            recipient_account_number=None,
+            recipient_name=None,
+            recipient_bank=None,
+            created_at=created_txn.created_at.isoformat() if created_txn.created_at else datetime.now().isoformat(),
+            updated_at=created_txn.updated_at.isoformat() if created_txn.updated_at else None,
         )
     except Exception as e:
         raise HTTPException(
@@ -199,22 +257,41 @@ async def withdraw_from_account(
 
     # Update balance
     try:
-        updated_account = await account_repo.update_balance(
+        await account_repo.update_balance(
             int(account_id),
             Decimal(str(request.amount)),
             operation='subtract',
         )
 
-        # TODO: Create transaction record in transaction history
+        # Create transaction record
+        transaction_repo = TransactionRepository(account_repo.session)
+        transaction = Transaction(
+            user_id=int(current_user.user_id),
+            from_account_id=int(account_id),
+            to_account_id=None,  # No destination for withdrawal
+            transaction_type='withdraw',
+            amount=Decimal(str(request.amount)),
+            currency='VND',
+            message=request.note,
+            status='completed',
+        )
+        created_txn = await transaction_repo.create(transaction)
 
         return TransactionResponse(
-            transaction_id=f'txn_{account_id}_{int(updated_account.updated_at.timestamp())}',
-            account_id=updated_account.id,
+            id=created_txn.id,
+            user_id=int(current_user.user_id),
+            from_account_id=int(account_id),
+            to_account_id=None,
             transaction_type='withdraw',
             amount=float(request.amount),
-            balance_after=float(updated_account.balance),
-            note=request.note,
-            created_at=updated_account.updated_at.isoformat(),
+            currency='VND',
+            status='completed',
+            message=request.note,
+            recipient_account_number=None,
+            recipient_name=None,
+            recipient_bank=None,
+            created_at=created_txn.created_at.isoformat() if created_txn.created_at else datetime.now().isoformat(),
+            updated_at=created_txn.updated_at.isoformat() if created_txn.updated_at else None,
         )
     except ValueError as e:
         raise HTTPException(

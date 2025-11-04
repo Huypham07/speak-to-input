@@ -10,3 +10,12 @@ postgres:
   max_connections: 20
 
 secret_key: sti-team-24
+
+whisper:
+  host: http://localhost
+  port: 8081
+
+llm:
+  api_key: ""
+  model: gemini-2.5-flash
+  base_url: https://generativelanguage.googleapis.com
