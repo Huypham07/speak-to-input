@@ -2,6 +2,7 @@
 
 import type React from "react"
 import { createContext, useContext, useState, useCallback, useEffect } from "react"
+import { useAuth } from "@/lib/auth-context"
 
 export interface Transfer {
   id: string
@@ -65,6 +66,7 @@ interface FinancialContextType {
 const FinancialContext = createContext<FinancialContextType | undefined>(undefined)
 
 export function FinancialProvider({ children }: { children: React.ReactNode }) {
+  const { user, isLoading: isAuthLoading } = useAuth()
   const [transfers, setTransfers] = useState<Transfer[]>([])
   const [bills, setBills] = useState<ExpenseBill[]>([])
   const [funds, setFunds] = useState<SavingsFund[]>([])
@@ -72,24 +74,40 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
 
   // Fetch funds from API
   const fetchFunds = useCallback(async () => {
+    // Don't fetch if user is not authenticated
+    if (!user) {
+      setFunds([])
+      return
+    }
+
     setIsLoadingFunds(true)
     try {
       const response = await fetch("/api/funds")
       if (response.ok) {
         const data = await response.json()
         setFunds(data)
+      } else if (response.status === 401) {
+        // Unauthorized - clear funds
+        setFunds([])
       }
     } catch (error) {
       console.error("Error fetching funds:", error)
+      setFunds([])
     } finally {
       setIsLoadingFunds(false)
     }
-  }, [])
+  }, [user])
 
-  // Fetch funds on mount
+  // Fetch funds when user is authenticated
   useEffect(() => {
-    fetchFunds()
-  }, [fetchFunds])
+    // Only fetch if auth check is complete and user is logged in
+    if (!isAuthLoading && user) {
+      fetchFunds()
+    } else if (!isAuthLoading && !user) {
+      // Clear funds when user logs out
+      setFunds([])
+    }
+  }, [user, isAuthLoading, fetchFunds])
 
   const addTransfer = useCallback((transfer: Omit<Transfer, "id" | "date" | "status">) => {
     const newTransfer: Transfer = {

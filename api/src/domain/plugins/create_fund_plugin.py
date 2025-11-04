@@ -12,6 +12,7 @@ from domain.entities import ExecutionResult
 from domain.entities import FieldValidation
 from domain.entities import SavingsFund
 from domain.entities import ValidationResult
+from domain.entities.transaction import Transaction
 from domain.value_objects import CapabilityType
 from domain.value_objects import FieldStatus
 
@@ -388,15 +389,17 @@ class CreateFundPlugin(IntentPlugin):
         Required in context:
         - user_id: User creating the fund
         - fund_repository: SavingsFundRepository instance
-        - account_repository: AccountRepository instance (if initial_amount > 0)
+        - account_repository: AccountRepository instance (required to link fund with main account)
+        - transaction_repository: TransactionRepository instance (optional, for transaction records)
         """
         try:
             # Get repositories from context
             fund_repo = context.get('fund_repository')
             account_repo = context.get('account_repository')
+            transaction_repo = context.get('transaction_repository')
             user_id = context.get('user_id')
 
-            if not fund_repo or not user_id:
+            if not fund_repo or not user_id or not account_repo:
                 return ExecutionResult(
                     success=False,
                     message='Missing required dependencies in context',
@@ -430,20 +433,27 @@ class CreateFundPlugin(IntentPlugin):
             else:
                 target_date = target_date_str
 
-            # Get user's first account for initial deposit
-            account_id = None
-            if initial_amount > 0 and account_repo:
-                user_accounts = await account_repo.get_by_user_id(int(user_id))
-                if user_accounts:
-                    account_id = int(user_accounts[0].id)
+            # Always get user's main account (first account) to link with fund
+            user_accounts = await account_repo.get_by_user_id(int(user_id))
+            if not user_accounts:
+                return ExecutionResult(
+                    success=False,
+                    message='Không tìm thấy tài khoản. Vui lòng tạo tài khoản trước khi tạo quỹ tiết kiệm.',
+                    data={},
+                )
 
-                    # Check balance
-                    if Decimal(str(user_accounts[0].balance)) < initial_amount:
-                        return ExecutionResult(
-                            success=False,
-                            message=f'Số dư không đủ để nạp tiền ban đầu. Số dư hiện tại: {user_accounts[0].balance:,} VND',
-                            data={},
-                        )
+            # Get main account
+            main_account = user_accounts[0]
+            account_id = int(main_account.id)
+
+            # If initial_amount > 0, check balance before deducting
+            if initial_amount > 0:
+                if Decimal(str(main_account.balance)) < initial_amount:
+                    return ExecutionResult(
+                        success=False,
+                        message=f'Số dư không đủ để nạp tiền ban đầu. Số dư hiện tại: {main_account.balance:,} VND',
+                        data={},
+                    )
 
             # Create SavingsFund entity
             fund = SavingsFund(
@@ -467,13 +477,12 @@ class CreateFundPlugin(IntentPlugin):
             # If initial amount, deposit it
             deposit_message = ''
             if initial_amount > 0:
-                # Deduct from account
-                if account_repo and account_id:
-                    await account_repo.update_balance(
-                        account_id=account_id,
-                        amount=initial_amount,
-                        operation='subtract',
-                    )
+                # Deduct from main account
+                await account_repo.update_balance(
+                    account_id=account_id,
+                    amount=initial_amount,
+                    operation='subtract',
+                )
 
                 # Deposit to fund
                 updated_fund = await fund_repo.deposit(
@@ -481,6 +490,27 @@ class CreateFundPlugin(IntentPlugin):
                     amount=initial_amount,
                 )
                 created_fund = updated_fund
+
+                # Create transaction record for initial deposit
+                # From account perspective: money goes out (withdraw from account)
+                if transaction_repo:
+                    transaction = Transaction(
+                        user_id=int(user_id),
+                        from_account_id=account_id,
+                        to_account_id=None,  # Fund is not an account
+                        transaction_type='withdraw',  # From account perspective: money withdrawn
+                        amount=initial_amount,
+                        currency='VND',
+                        message=f'Nạp tiền ban đầu vào quỹ "{fund_name}"',
+                        status='completed',
+                        extra_data={
+                            'fund_id': created_fund.id,
+                            'fund_name': fund_name,
+                            'transaction_category': 'fund_initial_deposit',
+                        },
+                    )
+                    await transaction_repo.create(transaction)
+
                 deposit_message = f'. Đã nạp số tiền ban đầu: {initial_amount:,} VND'
 
             # Build message

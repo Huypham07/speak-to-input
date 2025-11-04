@@ -10,6 +10,7 @@ from domain.entities import Capability
 from domain.entities import ExecutionResult
 from domain.entities import FieldValidation
 from domain.entities import ValidationResult
+from domain.entities.transaction import Transaction
 from domain.value_objects import CapabilityType
 from domain.value_objects import FieldStatus
 
@@ -140,11 +141,13 @@ class DepositFundPlugin(IntentPlugin):
         - user_id: User performing the deposit
         - fund_repository: SavingsFundRepository instance
         - account_repository: AccountRepository instance
+        - transaction_repository: TransactionRepository instance (optional, for transaction records)
         """
         try:
             # Get repositories from context
             fund_repo = context.get('fund_repository')
             account_repo = context.get('account_repository')
+            transaction_repo = context.get('transaction_repository')
             user_id = context.get('user_id')
 
             if not fund_repo or not account_repo or not user_id:
@@ -232,6 +235,26 @@ class DepositFundPlugin(IntentPlugin):
                 fund_id=fund_id,
                 amount=amount,
             )
+
+            # Create transaction record
+            # From account perspective: money goes out (withdraw from account)
+            if transaction_repo:
+                transaction = Transaction(
+                    user_id=int(user_id),
+                    from_account_id=account.id,
+                    to_account_id=None,  # Fund is not an account
+                    transaction_type='withdraw',  # From account perspective: money withdrawn
+                    amount=amount,
+                    currency='VND',
+                    message=f'Nạp tiền vào quỹ "{updated_fund.fund_name}"',
+                    status='completed',
+                    extra_data={
+                        'fund_id': fund_id,
+                        'fund_name': updated_fund.fund_name,
+                        'transaction_category': 'fund_deposit',
+                    },
+                )
+                await transaction_repo.create(transaction)
 
             # Calculate progress
             progress_percentage = (

@@ -104,6 +104,7 @@ async def execute_create_fund(
     # Repositories
     fund_repository=None,
     account_repository=None,
+    transaction_repository=None,
 ) -> ExecutionResult:
     """Execute create savings fund via plugin
 
@@ -135,6 +136,7 @@ async def execute_create_fund(
         'user_id': user_id,
         'fund_repository': fund_repository,
         'account_repository': account_repository,
+        'transaction_repository': transaction_repository,
     }
 
     return await plugin.execute(parameters, context)
@@ -148,6 +150,7 @@ async def execute_deposit_fund(
     # Repositories
     fund_repository=None,
     account_repository=None,
+    transaction_repository=None,
 ) -> ExecutionResult:
     """Execute deposit to fund via plugin
 
@@ -175,6 +178,7 @@ async def execute_deposit_fund(
         'user_id': user_id,
         'fund_repository': fund_repository,
         'account_repository': account_repository,
+        'transaction_repository': transaction_repository,
     }
 
     return await plugin.execute(parameters, context)
@@ -188,6 +192,7 @@ async def execute_withdraw_fund(
     # Repositories
     fund_repository=None,
     account_repository=None,
+    transaction_repository=None,
 ) -> ExecutionResult:
     """Execute withdraw from fund via plugin
 
@@ -215,6 +220,7 @@ async def execute_withdraw_fund(
         'user_id': user_id,
         'fund_repository': fund_repository,
         'account_repository': account_repository,
+        'transaction_repository': transaction_repository,
     }
 
     return await plugin.execute(parameters, context)
@@ -223,8 +229,10 @@ async def execute_withdraw_fund(
 async def execute_delete_fund(
     user_id: int,
     fund_id: int,
-    # Repository
+    # Repositories
     fund_repository=None,
+    account_repository=None,
+    transaction_repository=None,
 ) -> ExecutionResult:
     """Execute delete fund via plugin
 
@@ -248,6 +256,8 @@ async def execute_delete_fund(
     context = {
         'user_id': user_id,
         'fund_repository': fund_repository,
+        'account_repository': account_repository,
+        'transaction_repository': transaction_repository,
     }
 
     return await plugin.execute(parameters, context)

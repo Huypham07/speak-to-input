@@ -4,7 +4,7 @@ import { useFinancial } from "@/lib/financial-context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { PiggyBank, Plus, Minus, Trash2 } from "lucide-react";
+import { PiggyBank, Plus, Minus, Trash2, AlertTriangle, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import {
@@ -38,6 +38,7 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
   });
   const [amount, setAmount] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isDeletingFund, setIsDeletingFund] = useState(false);
   const [selectedFund, setSelectedFund] = useState<{
     id: number;
     current_amount: number;
@@ -54,10 +55,12 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
     open: boolean;
     fundId: number | null;
     fundName: string;
+    currentAmount: number;
   }>({
     open: false,
     fundId: null,
     fundName: "",
+    currentAmount: 0,
   });
 
   const getCategoryLabel = (category: string | null) => {
@@ -192,41 +195,40 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
   };
 
   const handleDeleteClick = (fundId: number, fundName: string, currentAmount: number) => {
-    // Kiểm tra nếu quỹ còn tiền
-    if (currentAmount > 0) {
-      toast.error(
-        `Quỹ "${fundName}" vẫn còn ${currentAmount.toLocaleString(
-          "vi-VN"
-        )} VND. Vui lòng rút hết tiền trước khi xóa quỹ.`,
-        {
-          duration: 5000,
-        }
-      );
-      return;
-    }
-
-    // Nếu quỹ trống, hiển thị dialog xác nhận
+    // Luôn hiển thị dialog xác nhận (tiền sẽ tự động trả về tài khoản chính nếu có)
     setDeleteConfirmDialog({
       open: true,
       fundId,
       fundName,
+      currentAmount,
     });
   };
 
   const handleDeleteConfirm = async () => {
     if (!deleteConfirmDialog.fundId) return;
 
+    setIsDeletingFund(true);
     try {
       await deleteFund(deleteConfirmDialog.fundId);
-      toast.success(`Đã xóa quỹ "${deleteConfirmDialog.fundName}" thành công`, {
-        duration: 3000,
-      });
-      setDeleteConfirmDialog({ open: false, fundId: null, fundName: "" });
+      // Message từ backend đã bao gồm thông tin về việc trả tiền (nếu có)
+      // Hiển thị success message từ backend hoặc default message
+      toast.success(
+        deleteConfirmDialog.currentAmount > 0
+          ? `Đã xóa quỹ "${deleteConfirmDialog.fundName}". ${deleteConfirmDialog.currentAmount.toLocaleString("vi-VN")} VND đã được tự động trả về tài khoản chính.`
+          : `Đã xóa quỹ "${deleteConfirmDialog.fundName}" thành công`,
+        {
+          duration: 4000,
+        }
+      );
+      // Đóng dialog sau khi xóa thành công
+      setDeleteConfirmDialog({ open: false, fundId: null, fundName: "", currentAmount: 0 });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Xóa quỹ thất bại";
       toast.error(errorMessage, {
         duration: 4000,
       });
+    } finally {
+      setIsDeletingFund(false);
     }
   };
 
@@ -519,23 +521,85 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
       <AlertDialog
         open={deleteConfirmDialog.open}
         onOpenChange={(open) => {
-          if (!open) {
-            setDeleteConfirmDialog({ open: false, fundId: null, fundName: "" });
+          // Không cho phép đóng dialog khi đang xóa
+          if (!open && !isDeletingFund) {
+            setDeleteConfirmDialog({ open: false, fundId: null, fundName: "", currentAmount: 0 });
           }
         }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Xác nhận xóa quỹ</AlertDialogTitle>
-            <AlertDialogDescription>
-              Bạn có chắc chắn muốn xóa quỹ <strong>"{deleteConfirmDialog.fundName}"</strong> không?
-              <br />
-              <span className="text-red-500 font-medium">Hành động này không thể hoàn tác.</span>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Hủy</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteConfirm} className="bg-red-600 hover:bg-red-700 focus:ring-red-600">
-              Xóa quỹ
+        <AlertDialogContent className="max-w-md w-[95vw] sm:w-full rounded-xl sm:rounded-2xl p-0 gap-0 border border-border shadow-xl bg-background">
+          {/* Header with Icon */}
+          <div className="flex items-center gap-4 px-6 pt-6 pb-4 border-b border-border bg-card">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10 dark:bg-destructive/20 shrink-0 ring-2 ring-destructive/20 dark:ring-destructive/30">
+              <AlertTriangle className="h-6 w-6 text-destructive" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <AlertDialogTitle className="text-xl font-semibold text-foreground mb-1">
+                Xác nhận xóa quỹ
+              </AlertDialogTitle>
+              <p className="text-sm text-muted-foreground">
+                Hành động này không thể hoàn tác
+              </p>
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="px-6 py-5 space-y-4 bg-background">
+            <p className="text-base text-foreground leading-relaxed">
+              Bạn có chắc chắn muốn xóa quỹ{" "}
+              <span className="font-semibold text-foreground">"{deleteConfirmDialog.fundName}"</span> không?
+            </p>
+
+            {deleteConfirmDialog.currentAmount > 0 && (
+              <div className="flex items-start gap-3 p-4 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 shadow-sm">
+                <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-amber-900 dark:text-amber-100 mb-1.5">
+                    Quỹ này còn tiền
+                  </p>
+                  <p className="text-sm text-amber-800 dark:text-amber-200 leading-relaxed">
+                    Quỹ còn <span className="font-semibold">{deleteConfirmDialog.currentAmount.toLocaleString("vi-VN")} VND</span>.
+                    Số tiền này sẽ được tự động trả về tài khoản chính khi xóa quỹ.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {deleteConfirmDialog.currentAmount === 0 && (
+              <div className="flex items-center gap-2.5 p-3.5 rounded-lg bg-muted/50 dark:bg-muted/30 border border-border">
+                <PiggyBank className="h-4 w-4 text-muted-foreground shrink-0" />
+                <p className="text-sm text-muted-foreground">
+                  Quỹ này đang trống, có thể xóa an toàn.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <AlertDialogFooter className="px-6 py-4 border-t border-border gap-3 sm:gap-2 bg-card/50">
+            <AlertDialogCancel
+              className="m-0 flex-1 sm:flex-initial border-border hover:bg-muted"
+              disabled={isDeletingFund}>
+              Hủy
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                // Ngăn dialog tự đóng khi click
+                e.preventDefault();
+                handleDeleteConfirm();
+              }}
+              disabled={isDeletingFund}
+              className="m-0 flex-1 sm:flex-initial bg-destructive text-destructive-foreground hover:bg-destructive/90 focus:ring-destructive focus:ring-offset-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
+              {isDeletingFund ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Đang xóa...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Xóa quỹ
+                </>
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
