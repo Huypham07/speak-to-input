@@ -4,29 +4,23 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 from typing import Dict
-from typing import List
 
-from domain.entities import BusinessState
-from domain.entities import Capability
 from domain.entities import ExecutionResult
-from domain.entities import FieldValidation
 from domain.entities import SavingsFund
-from domain.entities import ValidationResult
-from domain.entities.transaction import Transaction
-from domain.value_objects import CapabilityType
-from domain.value_objects import FieldStatus
+from domain.entities import Transaction
+from domain.value_objects import IntentType
 
 from .base_intent_plugin import IntentPlugin
 
 
 class CreateFundPlugin(IntentPlugin):
-    """Plugin for CREATE_FUND intent - Tạo quỹ tiết kiệm"""
+    """Plugin for CREATE_FUND intent"""
 
     # ========== Metadata ==========
 
     @property
     def intent_type(self) -> str:
-        return 'CREATE_FUND'
+        return IntentType.CREATE_FUND.value
 
     @property
     def display_name(self) -> str:
@@ -90,216 +84,6 @@ class CreateFundPlugin(IntentPlugin):
             },
         }
 
-    # ========== Validation ==========
-
-    def validate_parameters(
-        self,
-        parameters: Dict[str, Any],
-        context: Dict[str, Any],
-    ) -> ValidationResult:
-        """Validate fund parameters"""
-        results = []
-
-        # Validate fund_name
-        fund_name = parameters.get('fund_name')
-        if not fund_name:
-            results.append(
-                FieldValidation(
-                    field_name='fund_name',
-                    status=FieldStatus.MISSING,
-                    confidence=0.0,
-                ),
-            )
-        elif len(fund_name.strip()) < 1:
-            results.append(
-                FieldValidation(
-                    field_name='fund_name',
-                    status=FieldStatus.INVALID,
-                    value=fund_name,
-                    confidence=0.0,
-                    error_message='Tên quỹ không được để trống',
-                ),
-            )
-        else:
-            results.append(
-                FieldValidation(
-                    field_name='fund_name',
-                    status=FieldStatus.VALID,
-                    value=fund_name,
-                    confidence=1.0,
-                ),
-            )
-
-        # Validate target_amount
-        target_amount = parameters.get('target_amount')
-        if not target_amount:
-            results.append(
-                FieldValidation(
-                    field_name='target_amount',
-                    status=FieldStatus.MISSING,
-                    confidence=0.0,
-                ),
-            )
-        elif target_amount < 100000:
-            results.append(
-                FieldValidation(
-                    field_name='target_amount',
-                    status=FieldStatus.INVALID,
-                    value=target_amount,
-                    confidence=0.0,
-                    error_message='Số tiền mục tiêu phải từ 100,000 VND trở lên',
-                ),
-            )
-        else:
-            results.append(
-                FieldValidation(
-                    field_name='target_amount',
-                    status=FieldStatus.VALID,
-                    value=target_amount,
-                    confidence=1.0,
-                ),
-            )
-
-        # Validate target_date
-        target_date = parameters.get('target_date')
-        if not target_date:
-            results.append(
-                FieldValidation(
-                    field_name='target_date',
-                    status=FieldStatus.MISSING,
-                    confidence=0.0,
-                ),
-            )
-        else:
-            # TODO: Validate date format and ensure it's in the future
-            results.append(
-                FieldValidation(
-                    field_name='target_date',
-                    status=FieldStatus.VALID,
-                    value=target_date,
-                    confidence=1.0,
-                ),
-            )
-
-        # Validate initial_amount (optional)
-        initial_amount = parameters.get('initial_amount', 0)
-        if initial_amount < 0:
-            results.append(
-                FieldValidation(
-                    field_name='initial_amount',
-                    status=FieldStatus.INVALID,
-                    value=initial_amount,
-                    confidence=0.0,
-                    error_message='Số tiền ban đầu không thể âm',
-                ),
-            )
-        else:
-            # TODO: Check user balance
-            results.append(
-                FieldValidation(
-                    field_name='initial_amount',
-                    status=FieldStatus.VALID,
-                    value=initial_amount,
-                    confidence=1.0,
-                ),
-            )
-
-        # Validate monthly_contribution (optional but recommended)
-        monthly_contribution = parameters.get('monthly_contribution')
-        if monthly_contribution is None or monthly_contribution == 0:
-            # Calculate suggested monthly contribution
-            if target_amount and target_date:
-                suggested = self._calculate_monthly_contribution(
-                    target_amount,
-                    target_date,
-                    initial_amount,
-                )
-                results.append(
-                    FieldValidation(
-                        field_name='monthly_contribution',
-                        status=FieldStatus.AMBIGUOUS,
-                        value=suggested,
-                        confidence=0.8,
-                        metadata={
-                            'suggested': suggested,
-                            'message': f'Gợi ý đóng góp hàng tháng: {suggested:,.0f} VND',
-                        },
-                    ),
-                )
-        elif monthly_contribution < 0:
-            results.append(
-                FieldValidation(
-                    field_name='monthly_contribution',
-                    status=FieldStatus.INVALID,
-                    value=monthly_contribution,
-                    confidence=0.0,
-                    error_message='Số tiền đóng góp hàng tháng không thể âm',
-                ),
-            )
-        else:
-            results.append(
-                FieldValidation(
-                    field_name='monthly_contribution',
-                    status=FieldStatus.VALID,
-                    value=monthly_contribution,
-                    confidence=1.0,
-                ),
-            )
-
-        # Validate category (optional, suggest if missing)
-        category = parameters.get('category')
-        if not category and fund_name:
-            suggested_category = self._suggest_category(fund_name)
-            if suggested_category:
-                results.append(
-                    FieldValidation(
-                        field_name='category',
-                        status=FieldStatus.AMBIGUOUS,
-                        value=suggested_category,
-                        confidence=0.7,
-                        metadata={
-                            'options': [
-                                {'value': 'travel', 'label': 'Du lịch'},
-                                {'value': 'education', 'label': 'Giáo dục'},
-                                {'value': 'emergency', 'label': 'Khẩn cấp'},
-                                {'value': 'purchase', 'label': 'Mua sắm'},
-                                {'value': 'retirement', 'label': 'Hưu trí'},
-                                {'value': 'other', 'label': 'Khác'},
-                            ],
-                            'suggested': suggested_category,
-                        },
-                    ),
-                )
-        else:
-            results.append(
-                FieldValidation(
-                    field_name='category',
-                    status=FieldStatus.VALID,
-                    value=category,
-                    confidence=1.0,
-                ),
-            )
-
-        # Determine overall validity (category and monthly_contribution are optional)
-        required_fields = ['fund_name', 'target_amount', 'target_date', 'initial_amount']
-        is_valid = all(
-            r.status == FieldStatus.VALID
-            for r in results
-            if r.field_name in required_fields
-        )
-
-        missing = [r for r in results if r.status == FieldStatus.MISSING]
-        invalid = [r for r in results if r.status == FieldStatus.INVALID]
-        ambiguous = [r for r in results if r.status == FieldStatus.AMBIGUOUS]
-
-        return ValidationResult(
-            is_valid=is_valid,
-            field_results=results,
-            missing_fields=missing,
-            invalid_fields=invalid,
-            ambiguous_fields=ambiguous,
-        )
-
     def _calculate_monthly_contribution(
         self,
         target_amount: float,
@@ -333,46 +117,6 @@ class CreateFundPlugin(IntentPlugin):
         else:
             return 'other'
 
-    # ========== Capability Resolution ==========
-
-    def resolve_capabilities(
-        self,
-        parameters: Dict[str, Any],
-        validation_result: ValidationResult,
-        state: BusinessState,
-    ) -> List[Capability]:
-        """Resolve capabilities for fund creation"""
-        capabilities = []
-
-        # If all required fields are valid, show preview with calculations
-        if validation_result.is_valid:
-            target_amount = parameters.get('target_amount', 0)
-            initial_amount = parameters.get('initial_amount', 0)
-            monthly_contribution = parameters.get('monthly_contribution', 0)
-
-            # Calculate progress
-            progress_data = {
-                'target_amount': target_amount,
-                'current_amount': initial_amount,
-                'monthly_contribution': monthly_contribution,
-                'progress_percentage': (initial_amount / target_amount * 100) if target_amount > 0 else 0,
-            }
-
-            capabilities.append(
-                Capability(
-                    capability_type=CapabilityType.SHOW_FORM,
-                    data={
-                        'form_type': 'fund_preview',
-                        'fields': parameters,
-                        'schema': self.get_parameter_schema(),
-                        'progress': progress_data,
-                    },
-                    message='Xem trước quỹ tiết kiệm',
-                ),
-            )
-
-        return capabilities
-
     # ========== Execution ==========
 
     async def execute(
@@ -380,18 +124,7 @@ class CreateFundPlugin(IntentPlugin):
         parameters: Dict[str, Any],
         context: Dict[str, Any],
     ) -> ExecutionResult:
-        """Execute fund creation
-
-        Works for both:
-        1. Speech-to-input: Called by OrchestrationService after user confirms
-        2. Traditional API: Called directly from /funds endpoint
-
-        Required in context:
-        - user_id: User creating the fund
-        - fund_repository: SavingsFundRepository instance
-        - account_repository: AccountRepository instance (required to link fund with main account)
-        - transaction_repository: TransactionRepository instance (optional, for transaction records)
-        """
+        """Execute fund creation"""
         try:
             # Get repositories from context
             fund_repo = context.get('fund_repository')
@@ -399,22 +132,44 @@ class CreateFundPlugin(IntentPlugin):
             transaction_repo = context.get('transaction_repository')
             user_id = context.get('user_id')
 
-            if not fund_repo or not user_id or not account_repo:
+            if not fund_repo or not user_id or not account_repo or not transaction_repo:
                 return ExecutionResult(
                     success=False,
                     message='Missing required dependencies in context',
                     data={},
                 )
 
-            # Extract parameters
-            fund_name = parameters['fund_name']
-            target_amount = Decimal(str(parameters['target_amount']))
-            target_date_str = parameters['target_date']
-            initial_amount = Decimal(str(parameters.get('initial_amount', 0)))
-            monthly_contribution = Decimal(str(parameters.get('monthly_contribution', 0)))
-            category = parameters.get('category', self._suggest_category(fund_name))
-            auto_transfer = parameters.get('auto_transfer', False)
-            notes = parameters.get('notes', '')
+            # Validate and extract parameters
+            fund_name = parameters.get('fund_name', '').strip()
+            if not fund_name:
+                return ExecutionResult(
+                    success=False,
+                    message='Tên quỹ là bắt buộc',
+                    data={},
+                )
+
+            target_amount = parameters.get('target_amount')
+            if not target_amount:
+                return ExecutionResult(
+                    success=False,
+                    message='Số tiền mục tiêu là bắt buộc',
+                    data={},
+                )
+            if target_amount < 100000:
+                return ExecutionResult(
+                    success=False,
+                    message='Số tiền mục tiêu phải từ 100,000 VND trở lên',
+                    data={},
+                )
+            target_amount = Decimal(str(target_amount))
+
+            target_date_str = parameters.get('target_date')
+            if not target_date_str:
+                return ExecutionResult(
+                    success=False,
+                    message='Ngày mục tiêu là bắt buộc',
+                    data={},
+                )
 
             # Parse target_date
             if isinstance(target_date_str, str):
@@ -433,27 +188,27 @@ class CreateFundPlugin(IntentPlugin):
             else:
                 target_date = target_date_str
 
-            # Always get user's main account (first account) to link with fund
-            user_accounts = await account_repo.get_by_user_id(int(user_id))
-            if not user_accounts:
-                return ExecutionResult(
-                    success=False,
-                    message='Không tìm thấy tài khoản. Vui lòng tạo tài khoản trước khi tạo quỹ tiết kiệm.',
-                    data={},
-                )
+            # Optional parameters
+            initial_amount = Decimal(str(parameters.get('initial_amount', 0)))
+            monthly_contribution = Decimal(str(parameters.get('monthly_contribution', 0)))
+            category = parameters.get('category', 'other')
+            auto_transfer = parameters.get('auto_transfer', False)
+            notes = parameters.get('notes', '')
 
-            # Get main account
-            main_account = user_accounts[0]
-            account_id = int(main_account.id)
-
-            # If initial_amount > 0, check balance before deducting
+            # Get user's first account for initial deposit
+            account_id = None
             if initial_amount > 0:
-                if Decimal(str(main_account.balance)) < initial_amount:
-                    return ExecutionResult(
-                        success=False,
-                        message=f'Số dư không đủ để nạp tiền ban đầu. Số dư hiện tại: {main_account.balance:,} VND',
-                        data={},
-                    )
+                user_accounts = await account_repo.get_by_user_id(int(user_id))
+                if user_accounts:
+                    account_id = int(user_accounts[0].id)
+
+                    # Check balance
+                    if Decimal(str(user_accounts[0].balance)) < initial_amount:
+                        return ExecutionResult(
+                            success=False,
+                            message=f'Số dư không đủ để nạp tiền ban đầu. Số dư hiện tại: {user_accounts[0].balance:,} VND',
+                            data={},
+                        )
 
             # Create SavingsFund entity
             fund = SavingsFund(
@@ -477,12 +232,13 @@ class CreateFundPlugin(IntentPlugin):
             # If initial amount, deposit it
             deposit_message = ''
             if initial_amount > 0:
-                # Deduct from main account
-                await account_repo.update_balance(
-                    account_id=account_id,
-                    amount=initial_amount,
-                    operation='subtract',
-                )
+                # Deduct from account
+                if account_id:
+                    await account_repo.update_balance(
+                        account_id=account_id,
+                        amount=initial_amount,
+                        operation='subtract',
+                    )
 
                 # Deposit to fund
                 updated_fund = await fund_repo.deposit(
@@ -490,26 +246,24 @@ class CreateFundPlugin(IntentPlugin):
                     amount=initial_amount,
                 )
                 created_fund = updated_fund
-
                 # Create transaction record for initial deposit
                 # From account perspective: money goes out (withdraw from account)
-                if transaction_repo:
-                    transaction = Transaction(
-                        user_id=int(user_id),
-                        from_account_id=account_id,
-                        to_account_id=None,  # Fund is not an account
-                        transaction_type='withdraw',  # From account perspective: money withdrawn
-                        amount=initial_amount,
-                        currency='VND',
-                        message=f'Nạp tiền ban đầu vào quỹ "{fund_name}"',
-                        status='completed',
-                        extra_data={
-                            'fund_id': created_fund.id,
-                            'fund_name': fund_name,
-                            'transaction_category': 'fund_initial_deposit',
-                        },
-                    )
-                    await transaction_repo.create(transaction)
+                transaction = Transaction(
+                    user_id=int(user_id),
+                    from_account_id=account_id,
+                    to_account_id=None,  # Fund is not an account
+                    transaction_type='withdraw',  # From account perspective: money withdrawn
+                    amount=initial_amount,
+                    currency='VND',
+                    message=f'Nạp tiền ban đầu vào quỹ "{fund_name}"',
+                    status='completed',
+                    extra_data={
+                        'fund_id': created_fund.id,
+                        'fund_name': fund_name,
+                        'transaction_category': 'fund_initial_deposit',
+                    },
+                )
+                await transaction_repo.create(transaction)
 
                 deposit_message = f'. Đã nạp số tiền ban đầu: {initial_amount:,} VND'
 

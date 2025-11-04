@@ -3,17 +3,11 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 from typing import Dict
-from typing import List
 from typing import Optional
 
-from domain.entities import BusinessState
-from domain.entities import Capability
 from domain.entities import ExecutionResult
-from domain.entities import FieldValidation
 from domain.entities import Transaction
-from domain.entities import ValidationResult
-from domain.value_objects import CapabilityType
-from domain.value_objects import FieldStatus
+from domain.value_objects import IntentType
 
 from .base_intent_plugin import IntentPlugin
 
@@ -23,16 +17,12 @@ class SendMoneyPlugin(IntentPlugin):
 
     def __init__(self):
         super().__init__()
-        # Repositories will be injected via context
-        self._transaction_repo = None
-        self._account_repo = None
-        self._contact_repo = None
 
     # ========== Metadata ==========
 
     @property
     def intent_type(self) -> str:
-        return 'SEND_MONEY'
+        return IntentType.SEND_MONEY.value
 
     @property
     def display_name(self) -> str:
@@ -67,156 +57,6 @@ class SendMoneyPlugin(IntentPlugin):
             },
         }
 
-    # ========== Validation ==========
-
-    def validate_parameters(
-        self,
-        parameters: Dict[str, Any],
-        context: Dict[str, Any],
-    ) -> ValidationResult:
-        """Validate transfer parameters"""
-        results = []
-
-        # Validate amount
-        amount = parameters.get('amount')
-        if not amount:
-            results.append(
-                FieldValidation(
-                    field_name='amount',
-                    status=FieldStatus.MISSING,
-                    confidence=0.0,
-                ),
-            )
-        elif amount < 10000 or amount > 50000000:
-            results.append(
-                FieldValidation(
-                    field_name='amount',
-                    status=FieldStatus.INVALID,
-                    value=amount,
-                    confidence=0.0,
-                    error_message='Số tiền phải từ 10,000 đến 50,000,000 VND',
-                ),
-            )
-        else:
-            # Check user balance (async check would be in orchestration service)
-            results.append(
-                FieldValidation(
-                    field_name='amount',
-                    status=FieldStatus.VALID,
-                    value=amount,
-                    confidence=1.0,
-                ),
-            )
-
-        # Validate recipient
-        recipient = parameters.get('recipient')
-        if not recipient:
-            results.append(
-                FieldValidation(
-                    field_name='recipient',
-                    status=FieldStatus.MISSING,
-                    confidence=0.0,
-                ),
-            )
-        else:
-            # Mark as valid - actual resolution happens in execute()
-            # TODO: Could check for ambiguous contacts here
-            results.append(
-                FieldValidation(
-                    field_name='recipient',
-                    status=FieldStatus.VALID,
-                    value=recipient,
-                    confidence=1.0,
-                ),
-            )
-
-        # Determine overall validity
-        is_valid = all(r.status == FieldStatus.VALID for r in results)
-        missing = [r for r in results if r.status == FieldStatus.MISSING]
-        invalid = [r for r in results if r.status == FieldStatus.INVALID]
-        ambiguous = [r for r in results if r.status == FieldStatus.AMBIGUOUS]
-
-        return ValidationResult(
-            is_valid=is_valid,
-            field_results=results,
-            missing_fields=missing,
-            invalid_fields=invalid,
-            ambiguous_fields=ambiguous,
-        )
-
-    # ========== Capability Resolution ==========
-
-    def resolve_capabilities(
-        self,
-        parameters: Dict[str, Any],
-        validation_result: ValidationResult,
-        state: BusinessState,
-    ) -> List[Capability]:
-        """Resolve capabilities based on validation"""
-        capabilities = []
-
-        # Handle INVALID fields - request correction
-        if validation_result.invalid_fields:
-            for field in validation_result.invalid_fields:
-                if field.field_name == 'amount':
-                    capabilities.append(
-                        Capability(
-                            capability_type=CapabilityType.REQUEST_FIELD,
-                            priority=1,
-                            data={
-                                'field': 'amount',
-                                'message': f'{field.error_message or "Số tiền không hợp lệ"}. Vui lòng nhập lại.',
-                                'current_value': field.value,
-                            },
-                        ),
-                    )
-
-        # Handle AMBIGUOUS fields - request clarification
-        if validation_result.ambiguous_fields:
-            for field in validation_result.ambiguous_fields:
-                if field.field_name == 'recipient':
-                    capabilities.append(
-                        Capability(
-                            capability_type=CapabilityType.REQUEST_CLARIFICATION,
-                            priority=1,
-                            data={
-                                'field': 'recipient',
-                                'message': 'Tìm thấy nhiều người nhận. Bạn muốn chuyển cho ai?',
-                                'options': field.value,
-                            },
-                        ),
-                    )
-
-        # Handle MISSING fields - request input
-        if validation_result.missing_fields:
-            for field in validation_result.missing_fields:
-                if field.field_name == 'amount':
-                    capabilities.append(
-                        Capability(
-                            capability_type=CapabilityType.REQUEST_FIELD,
-                            priority=2,
-                            data={
-                                'field': 'amount',
-                                'message': 'Bạn muốn chuyển bao nhiêu?',
-                            },
-                        ),
-                    )
-                elif field.field_name == 'recipient':
-                    capabilities.append(
-                        Capability(
-                            capability_type=CapabilityType.REQUEST_FIELD,
-                            priority=2,
-                            data={
-                                'field': 'recipient',
-                                'message': 'Chuyển cho ai?',
-                            },
-                        ),
-                    )
-
-        return capabilities
-
-    # ========== State Machine ==========
-
     # ========== Execution ==========
 
     async def execute(
@@ -226,9 +66,15 @@ class SendMoneyPlugin(IntentPlugin):
     ) -> ExecutionResult:
         """Execute money transfer
 
-        Works for both:
-        1. Speech-to-input: Called by OrchestrationService after user confirms
-        2. Traditional API: Called directly from /transfers endpoint
+        Validates parameters and executes transfer immediately.
+        Raises clear errors for missing or invalid fields.
+
+        Required parameters:
+        - amount: Transfer amount (must be between 10,000 and 50,000,000 VND)
+        - recipient: Recipient account number or contact name
+
+        Optional parameters:
+        - message: Transfer message
 
         Required in context:
         - user_id: User performing the transfer
@@ -256,10 +102,50 @@ class SendMoneyPlugin(IntentPlugin):
             assert contact_repo is not None
             assert user_id is not None
 
-            # Extract parameters
-            amount = Decimal(str(parameters['amount']))
-            recipient = parameters['recipient']
+            # === VALIDATE REQUIRED FIELDS ===
+
+            # Validate amount
+            amount_value = parameters.get('amount')
+            if amount_value is None:
+                return ExecutionResult(
+                    success=False,
+                    message='Vui lòng nhập số tiền cần chuyển',
+                    data={'field': 'amount', 'error_type': 'MISSING_FIELD'},
+                )
+
+            try:
+                amount = Decimal(str(amount_value))
+                if amount < 10000:
+                    return ExecutionResult(
+                        success=False,
+                        message='Số tiền chuyển tối thiểu là 10,000 VND',
+                        data={'field': 'amount', 'error_type': 'INVALID_VALUE', 'min': 10000},
+                    )
+                if amount > 50000000:
+                    return ExecutionResult(
+                        success=False,
+                        message='Số tiền chuyển tối đa là 50,000,000 VND',
+                        data={'field': 'amount', 'error_type': 'INVALID_VALUE', 'max': 50000000},
+                    )
+            except (ValueError, TypeError):
+                return ExecutionResult(
+                    success=False,
+                    message='Số tiền không hợp lệ',
+                    data={'field': 'amount', 'error_type': 'INVALID_FORMAT'},
+                )
+
+            # Validate recipient
+            recipient = parameters.get('recipient', '').strip()
+            if not recipient:
+                return ExecutionResult(
+                    success=False,
+                    message='Vui lòng nhập số tài khoản người nhận',
+                    data={'field': 'recipient', 'error_type': 'MISSING_FIELD'},
+                )
+
             message = parameters.get('message', '')
+
+            # === EXECUTE TRANSFER ===
 
             # Get user's account (assume first active account)
             user_accounts = await account_repo.get_by_user_id(int(user_id))
@@ -277,7 +163,7 @@ class SendMoneyPlugin(IntentPlugin):
                 return ExecutionResult(
                     success=False,
                     message=f'Số dư không đủ. Số dư hiện tại: {from_account.balance:,} VND',
-                    data={'balance': float(from_account.balance)},
+                    data={'balance': float(from_account.balance), 'error_type': 'INSUFFICIENT_BALANCE'},
                 )
 
             # Resolve recipient
@@ -292,14 +178,14 @@ class SendMoneyPlugin(IntentPlugin):
                 return ExecutionResult(
                     success=False,
                     message=f'Không tìm thấy người nhận: {recipient}',
-                    data={},
+                    data={'field': 'recipient', 'error_type': 'NOT_FOUND'},
                 )
 
             if recipient_info.get('account_id') == from_account.id:
                 return ExecutionResult(
                     success=False,
                     message='Không thể chuyển tiền vào cùng một tài khoản',
-                    data={},
+                    data={'field': 'recipient', 'error_type': 'SAME_ACCOUNT'},
                 )
 
             # Determine if internal or external transfer

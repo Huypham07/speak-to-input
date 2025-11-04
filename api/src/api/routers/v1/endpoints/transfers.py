@@ -10,7 +10,8 @@ from api.helpers.dependencies import get_current_user
 from api.helpers.jwt_auth import TokenData
 from api.schemas import TransferRequest
 from api.schemas import TransferResponse
-from application.use_cases.execute_plugin import execute_send_money
+from application.use_cases import execute_plugin
+from domain.value_objects.intent_type import IntentType
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
@@ -36,14 +37,19 @@ async def create_transfer(
     """
     try:
         # Execute transfer via plugin
-        result = await execute_send_money(
-            user_id=int(current_user.user_id),
-            amount=request.amount,
-            recipient=request.recipient_account_number,
-            message=request.message or '',
-            transaction_repository=transaction_repo,
-            account_repository=account_repo,
-            contact_repository=contact_repo,
+        result = await execute_plugin.execute(
+            intent_type=IntentType.SEND_MONEY.value,
+            parameters={
+                'amount': request.amount,
+                'recipient_account_number': request.recipient_account_number,
+                'message': request.message or '',
+            },
+            context={
+                'user_id': int(current_user.user_id),
+                'transaction_repository': transaction_repo,
+                'account_repository': account_repo,
+                'contact_repository': contact_repo,
+            },
         )
 
         if not result.success:

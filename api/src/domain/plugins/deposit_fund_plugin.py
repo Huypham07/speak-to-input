@@ -3,28 +3,22 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 from typing import Dict
-from typing import List
 
-from domain.entities import BusinessState
-from domain.entities import Capability
 from domain.entities import ExecutionResult
-from domain.entities import FieldValidation
-from domain.entities import ValidationResult
-from domain.entities.transaction import Transaction
-from domain.value_objects import CapabilityType
-from domain.value_objects import FieldStatus
+from domain.entities import Transaction
+from domain.value_objects import IntentType
 
 from .base_intent_plugin import IntentPlugin
 
 
 class DepositFundPlugin(IntentPlugin):
-    """Plugin for DEPOSIT_FUND intent - Nạp tiền vào quỹ tiết kiệm"""
+    """Plugin for DEPOSIT_FUND intent"""
 
     # ========== Metadata ==========
 
     @property
     def intent_type(self) -> str:
-        return 'DEPOSIT_FUND'
+        return IntentType.DEPOSIT_FUND.value
 
     @property
     def display_name(self) -> str:
@@ -60,74 +54,6 @@ class DepositFundPlugin(IntentPlugin):
             },
         }
 
-    # ========== Validation ==========
-
-    def validate_parameters(
-        self,
-        parameters: Dict[str, Any],
-        context: Dict[str, Any],
-    ) -> ValidationResult:
-        """Validate deposit parameters (minimal validation - detailed validation in execute)"""
-        results = []
-
-        for field in ['fund_id', 'amount']:
-            if field not in parameters or parameters[field] is None:
-                results.append(
-                    FieldValidation(
-                        field_name=field,
-                        status=FieldStatus.MISSING,
-                        confidence=0.0,
-                    ),
-                )
-            else:
-                results.append(
-                    FieldValidation(
-                        field_name=field,
-                        status=FieldStatus.VALID,
-                        value=parameters[field],
-                        confidence=1.0,
-                    ),
-                )
-
-        is_valid = all(r.status == FieldStatus.VALID for r in results)
-        missing = [r for r in results if r.status == FieldStatus.MISSING]
-        invalid = [r for r in results if r.status == FieldStatus.INVALID]
-        ambiguous = [r for r in results if r.status == FieldStatus.AMBIGUOUS]
-
-        return ValidationResult(
-            is_valid=is_valid,
-            field_results=results,
-            missing_fields=missing,
-            invalid_fields=invalid,
-            ambiguous_fields=ambiguous,
-        )
-
-    # ========== Capability Resolution ==========
-
-    def resolve_capabilities(
-        self,
-        parameters: Dict[str, Any],
-        validation_result: ValidationResult,
-        state: BusinessState,
-    ) -> List[Capability]:
-        """Resolve capabilities for fund deposit (for speech-to-input flow)"""
-        capabilities = []
-
-        # Request confirmation if validation passes (for speech-to-input)
-        if validation_result.is_valid:
-            capabilities.append(
-                Capability(
-                    capability_type=CapabilityType.REQUEST_CONFIRMATION,
-                    data={
-                        'message': f'Nạp {parameters.get("amount", 0):,.0f} VND vào quỹ?',
-                        'parameters': parameters,
-                    },
-                    message='Xác nhận nạp tiền vào quỹ',
-                ),
-            )
-
-        return capabilities
-
     # ========== Execution ==========
 
     async def execute(
@@ -135,13 +61,12 @@ class DepositFundPlugin(IntentPlugin):
         parameters: Dict[str, Any],
         context: Dict[str, Any],
     ) -> ExecutionResult:
-        """Execute fund deposit
+        """Execute fund deposit with inline validation
 
         Required in context:
         - user_id: User performing the deposit
         - fund_repository: SavingsFundRepository instance
         - account_repository: AccountRepository instance
-        - transaction_repository: TransactionRepository instance (optional, for transaction records)
         """
         try:
             # Get repositories from context
@@ -150,16 +75,38 @@ class DepositFundPlugin(IntentPlugin):
             transaction_repo = context.get('transaction_repository')
             user_id = context.get('user_id')
 
-            if not fund_repo or not account_repo or not user_id:
+            if not fund_repo or not account_repo or not transaction_repo or not user_id:
                 return ExecutionResult(
                     success=False,
                     message='Missing required dependencies in context',
                     data={},
                 )
 
-            # Extract parameters
-            fund_id = int(parameters['fund_id'])
-            amount = Decimal(str(parameters['amount']))
+            # Validate and extract parameters
+            fund_id = parameters.get('fund_id')
+            if not fund_id:
+                return ExecutionResult(
+                    success=False,
+                    message='Fund ID là bắt buộc',
+                    data={},
+                )
+            fund_id = int(fund_id)
+
+            amount = parameters.get('amount')
+            if not amount:
+                return ExecutionResult(
+                    success=False,
+                    message='Số tiền là bắt buộc',
+                    data={},
+                )
+            if amount < 1000:
+                return ExecutionResult(
+                    success=False,
+                    message='Số tiền phải từ 1,000 VND trở lên',
+                    data={},
+                )
+            amount = Decimal(str(amount))
+
             from_account_id = parameters.get('from_account_id')
 
             # Get fund
@@ -238,23 +185,22 @@ class DepositFundPlugin(IntentPlugin):
 
             # Create transaction record
             # From account perspective: money goes out (withdraw from account)
-            if transaction_repo:
-                transaction = Transaction(
-                    user_id=int(user_id),
-                    from_account_id=account.id,
-                    to_account_id=None,  # Fund is not an account
-                    transaction_type='withdraw',  # From account perspective: money withdrawn
-                    amount=amount,
-                    currency='VND',
-                    message=f'Nạp tiền vào quỹ "{updated_fund.fund_name}"',
-                    status='completed',
-                    extra_data={
-                        'fund_id': fund_id,
-                        'fund_name': updated_fund.fund_name,
-                        'transaction_category': 'fund_deposit',
-                    },
-                )
-                await transaction_repo.create(transaction)
+            transaction = Transaction(
+                user_id=int(user_id),
+                from_account_id=account.id,
+                to_account_id=None,  # Fund is not an account
+                transaction_type='withdraw',  # From account perspective: money withdrawn
+                amount=amount,
+                currency='VND',
+                message=f'Nạp tiền vào quỹ "{updated_fund.fund_name}"',
+                status='completed',
+                extra_data={
+                    'fund_id': fund_id,
+                    'fund_name': updated_fund.fund_name,
+                    'transaction_category': 'fund_deposit',
+                },
+            )
+            await transaction_repo.create(transaction)
 
             # Calculate progress
             progress_percentage = (

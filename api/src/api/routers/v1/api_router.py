@@ -7,11 +7,15 @@ from .endpoints.auth import router as auth_router
 from .endpoints.bills import router as bills_router
 from .endpoints.funds import router as funds_router
 from .endpoints.transfers import router as transfers_router
+from .endpoints.voice import router as voice_router
 
 api_router = APIRouter(prefix='/api/v1')
 
 # Authentication
 api_router.include_router(auth_router)
+
+# Voice input (WebSocket)
+api_router.include_router(voice_router)
 
 # Traditional API endpoints
 api_router.include_router(accounts_router)

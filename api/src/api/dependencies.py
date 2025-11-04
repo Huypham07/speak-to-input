@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from application.services import IntentUnderstandingService
-from application.services import StateMachineService
 from application.services import VoiceService
 from application.services.orchestration_service import OrchestrationService
 from domain.plugins.registry import get_plugin_registry
@@ -11,7 +10,6 @@ from infra.db.repositories import AccountRepository
 from infra.db.repositories import BillRepository
 from infra.db.repositories import ContactRepository
 from infra.db.repositories import SavingsFundRepository
-from infra.db.repositories import SessionRepository
 from infra.db.repositories import TransactionRepository
 from infra.db.repositories import UserRepository
 from infra.infra_manager import InfrastructureManager
@@ -31,12 +29,6 @@ def get_settings(request: Request) -> Settings:
 
 
 # ========== Repository Dependencies ==========
-
-def get_session_repository(
-    infra_manager: InfrastructureManager = Depends(get_infra_manager),
-) -> SessionRepository:
-    """Get Session Repository"""
-    return infra_manager.session_repository
 
 
 def get_user_repository(
@@ -101,18 +93,8 @@ def get_intent_service(
     )
 
 
-def get_state_machine_service(
-    settings: Settings = Depends(get_settings),
-) -> StateMachineService:
-    """Create State Machine Service"""
-    return StateMachineService(settings)
-
-
 def get_orchestration_service(
     settings: Settings = Depends(get_settings),
-    session_repository: SessionRepository = Depends(get_session_repository),
-    intent_service: IntentUnderstandingService = Depends(get_intent_service),
-    state_machine_service: StateMachineService = Depends(get_state_machine_service),
     transaction_repository: TransactionRepository = Depends(get_transaction_repository),
     account_repository: AccountRepository = Depends(get_account_repository),
     contact_repository: ContactRepository = Depends(get_contact_repository),
@@ -122,9 +104,6 @@ def get_orchestration_service(
     """Create Orchestration Service with all dependencies"""
     return OrchestrationService(
         settings=settings,
-        session_repository=session_repository,
-        intent_service=intent_service,
-        state_machine_service=state_machine_service,
         transaction_repository=transaction_repository,
         account_repository=account_repository,
         contact_repository=contact_repository,

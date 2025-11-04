@@ -3,28 +3,22 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 from typing import Dict
-from typing import List
 
-from domain.entities import BusinessState
-from domain.entities import Capability
 from domain.entities import ExecutionResult
-from domain.entities import FieldValidation
-from domain.entities import ValidationResult
-from domain.entities.transaction import Transaction
-from domain.value_objects import CapabilityType
-from domain.value_objects import FieldStatus
+from domain.entities import Transaction
+from domain.value_objects import IntentType
 
 from .base_intent_plugin import IntentPlugin
 
 
 class WithdrawFundPlugin(IntentPlugin):
-    """Plugin for WITHDRAW_FUND intent - Rút tiền từ quỹ tiết kiệm"""
+    """Plugin for WITHDRAW_FUND intent - Simplified for direct execution"""
 
     # ========== Metadata ==========
 
     @property
     def intent_type(self) -> str:
-        return 'WITHDRAW_FUND'
+        return IntentType.WITHDRAW_FUND.value
 
     @property
     def display_name(self) -> str:
@@ -60,74 +54,6 @@ class WithdrawFundPlugin(IntentPlugin):
             },
         }
 
-    # ========== Validation ==========
-
-    def validate_parameters(
-        self,
-        parameters: Dict[str, Any],
-        context: Dict[str, Any],
-    ) -> ValidationResult:
-        """Validate withdraw parameters (minimal validation - detailed validation in execute)"""
-        results = []
-
-        for field in ['fund_id', 'amount']:
-            if field not in parameters or parameters[field] is None:
-                results.append(
-                    FieldValidation(
-                        field_name=field,
-                        status=FieldStatus.MISSING,
-                        confidence=0.0,
-                    ),
-                )
-            else:
-                results.append(
-                    FieldValidation(
-                        field_name=field,
-                        status=FieldStatus.VALID,
-                        value=parameters[field],
-                        confidence=1.0,
-                    ),
-                )
-
-        is_valid = all(r.status == FieldStatus.VALID for r in results)
-        missing = [r for r in results if r.status == FieldStatus.MISSING]
-        invalid = [r for r in results if r.status == FieldStatus.INVALID]
-        ambiguous = [r for r in results if r.status == FieldStatus.AMBIGUOUS]
-
-        return ValidationResult(
-            is_valid=is_valid,
-            field_results=results,
-            missing_fields=missing,
-            invalid_fields=invalid,
-            ambiguous_fields=ambiguous,
-        )
-
-    # ========== Capability Resolution ==========
-
-    def resolve_capabilities(
-        self,
-        parameters: Dict[str, Any],
-        validation_result: ValidationResult,
-        state: BusinessState,
-    ) -> List[Capability]:
-        """Resolve capabilities for fund withdrawal (for speech-to-input flow)"""
-        capabilities = []
-
-        # Request confirmation if validation passes (for speech-to-input)
-        if validation_result.is_valid:
-            capabilities.append(
-                Capability(
-                    capability_type=CapabilityType.REQUEST_CONFIRMATION,
-                    data={
-                        'message': f'Rút {parameters.get("amount", 0):,.0f} VND từ quỹ?',
-                        'parameters': parameters,
-                    },
-                    message='Xác nhận rút tiền từ quỹ',
-                ),
-            )
-
-        return capabilities
-
     # ========== Execution ==========
 
     async def execute(
@@ -135,13 +61,12 @@ class WithdrawFundPlugin(IntentPlugin):
         parameters: Dict[str, Any],
         context: Dict[str, Any],
     ) -> ExecutionResult:
-        """Execute fund withdrawal
+        """Execute fund withdrawal with inline validation
 
         Required in context:
         - user_id: User performing the withdrawal
         - fund_repository: SavingsFundRepository instance
         - account_repository: AccountRepository instance
-        - transaction_repository: TransactionRepository instance (optional, for transaction records)
         """
         try:
             # Get repositories from context
@@ -150,16 +75,38 @@ class WithdrawFundPlugin(IntentPlugin):
             transaction_repo = context.get('transaction_repository')
             user_id = context.get('user_id')
 
-            if not fund_repo or not account_repo or not user_id:
+            if not fund_repo or not account_repo or not transaction_repo or not user_id:
                 return ExecutionResult(
                     success=False,
                     message='Missing required dependencies in context',
                     data={},
                 )
 
-            # Extract parameters
-            fund_id = int(parameters['fund_id'])
-            amount = Decimal(str(parameters['amount']))
+            # Validate and extract parameters
+            fund_id = parameters.get('fund_id')
+            if not fund_id:
+                return ExecutionResult(
+                    success=False,
+                    message='Fund ID là bắt buộc',
+                    data={},
+                )
+            fund_id = int(fund_id)
+
+            amount = parameters.get('amount')
+            if not amount:
+                return ExecutionResult(
+                    success=False,
+                    message='Số tiền là bắt buộc',
+                    data={},
+                )
+            if amount < 1000:
+                return ExecutionResult(
+                    success=False,
+                    message='Số tiền phải từ 1,000 VND trở lên',
+                    data={},
+                )
+            amount = Decimal(str(amount))
+
             to_account_id = parameters.get('to_account_id')
 
             # Get fund
@@ -228,23 +175,22 @@ class WithdrawFundPlugin(IntentPlugin):
 
             # Create transaction record
             # From account perspective: money comes in (deposit to account)
-            if transaction_repo:
-                transaction = Transaction(
-                    user_id=int(user_id),
-                    from_account_id=None,  # Fund is not an account
-                    to_account_id=account.id,
-                    transaction_type='deposit',  # From account perspective: money deposited
-                    amount=amount,
-                    currency='VND',
-                    message=f'Rút tiền từ quỹ "{updated_fund.fund_name}"',
-                    status='completed',
-                    extra_data={
-                        'fund_id': fund_id,
-                        'fund_name': updated_fund.fund_name,
-                        'transaction_category': 'fund_withdraw',
-                    },
-                )
-                await transaction_repo.create(transaction)
+            transaction = Transaction(
+                user_id=int(user_id),
+                from_account_id=None,  # Fund is not an account
+                to_account_id=account.id,
+                transaction_type='deposit',  # From account perspective: money deposited
+                amount=amount,
+                currency='VND',
+                message=f'Rút tiền từ quỹ "{updated_fund.fund_name}"',
+                status='completed',
+                extra_data={
+                    'fund_id': fund_id,
+                    'fund_name': updated_fund.fund_name,
+                    'transaction_category': 'fund_withdraw',
+                },
+            )
+            await transaction_repo.create(transaction)
 
             # Calculate progress
             progress_percentage = (
@@ -268,16 +214,9 @@ class WithdrawFundPlugin(IntentPlugin):
             )
 
         except ValueError as e:
-            error_msg = str(e)
-            if 'Insufficient fund balance' in error_msg:
-                return ExecutionResult(
-                    success=False,
-                    message=f'Số tiền trong quỹ không đủ. Số tiền hiện có: {fund.current_amount:,.0f} VND',
-                    data={},
-                )
             return ExecutionResult(
                 success=False,
-                message=f'Lỗi: {error_msg}',
+                message=f'Lỗi: {str(e)}',
                 data={},
             )
         except Exception as e:

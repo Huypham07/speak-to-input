@@ -4,16 +4,10 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 from typing import Dict
-from typing import List
 
 from domain.entities import Bill
-from domain.entities import BusinessState
-from domain.entities import Capability
 from domain.entities import ExecutionResult
-from domain.entities import FieldValidation
-from domain.entities import ValidationResult
-from domain.value_objects import CapabilityType
-from domain.value_objects import FieldStatus
+from domain.value_objects import IntentType
 
 from .base_intent_plugin import IntentPlugin
 
@@ -25,7 +19,7 @@ class CreateBillPlugin(IntentPlugin):
 
     @property
     def intent_type(self) -> str:
-        return 'CREATE_BILL'
+        return IntentType.CREATE_BILL.value
 
     @property
     def display_name(self) -> str:
@@ -84,193 +78,6 @@ class CreateBillPlugin(IntentPlugin):
             },
         }
 
-    # ========== Validation ==========
-
-    def validate_parameters(
-        self,
-        parameters: Dict[str, Any],
-        context: Dict[str, Any],
-    ) -> ValidationResult:
-        """Validate bill parameters"""
-        results = []
-
-        # Validate bill_name
-        bill_name = parameters.get('bill_name')
-        if not bill_name:
-            results.append(
-                FieldValidation(
-                    field_name='bill_name',
-                    status=FieldStatus.MISSING,
-                    confidence=0.0,
-                ),
-            )
-        elif len(bill_name.strip()) < 1:
-            results.append(
-                FieldValidation(
-                    field_name='bill_name',
-                    status=FieldStatus.INVALID,
-                    value=bill_name,
-                    confidence=0.0,
-                    error_message='Tên hóa đơn không được để trống',
-                ),
-            )
-        else:
-            results.append(
-                FieldValidation(
-                    field_name='bill_name',
-                    status=FieldStatus.VALID,
-                    value=bill_name,
-                    confidence=1.0,
-                ),
-            )
-
-        # Validate amount
-        amount = parameters.get('amount')
-        if not amount:
-            results.append(
-                FieldValidation(
-                    field_name='amount',
-                    status=FieldStatus.MISSING,
-                    confidence=0.0,
-                ),
-            )
-        elif amount < 1000 or amount > 100000000:
-            results.append(
-                FieldValidation(
-                    field_name='amount',
-                    status=FieldStatus.INVALID,
-                    value=amount,
-                    confidence=0.0,
-                    error_message='Số tiền phải từ 1,000 đến 100,000,000 VND',
-                ),
-            )
-        else:
-            results.append(
-                FieldValidation(
-                    field_name='amount',
-                    status=FieldStatus.VALID,
-                    value=amount,
-                    confidence=1.0,
-                ),
-            )
-
-        # Validate due_date
-        due_date = parameters.get('due_date')
-        if not due_date:
-            results.append(
-                FieldValidation(
-                    field_name='due_date',
-                    status=FieldStatus.MISSING,
-                    confidence=0.0,
-                ),
-            )
-        else:
-            # TODO: Validate date format and ensure it's in the future
-            results.append(
-                FieldValidation(
-                    field_name='due_date',
-                    status=FieldStatus.VALID,
-                    value=due_date,
-                    confidence=1.0,
-                ),
-            )
-
-        # Validate category (optional, suggest if missing)
-        category = parameters.get('category')
-        if not category and bill_name:
-            # Suggest category based on bill_name
-            suggested_category = self._suggest_category(bill_name)
-            if suggested_category:
-                results.append(
-                    FieldValidation(
-                        field_name='category',
-                        status=FieldStatus.AMBIGUOUS,
-                        value=suggested_category,
-                        confidence=0.7,
-                        metadata={
-                            'options': [
-                                {'value': 'utilities', 'label': 'Tiện ích (điện, nước, gas)'},
-                                {'value': 'rent', 'label': 'Tiền nhà'},
-                                {'value': 'insurance', 'label': 'Bảo hiểm'},
-                                {'value': 'subscription', 'label': 'Dịch vụ đăng ký'},
-                                {'value': 'other', 'label': 'Khác'},
-                            ],
-                            'suggested': suggested_category,
-                        },
-                    ),
-                )
-        else:
-            results.append(
-                FieldValidation(
-                    field_name='category',
-                    status=FieldStatus.VALID,
-                    value=category,
-                    confidence=1.0,
-                ),
-            )
-
-        # Determine overall validity
-        is_valid = all(
-            r.status == FieldStatus.VALID or r.field_name == 'category'
-            for r in results
-        )
-        missing = [r for r in results if r.status == FieldStatus.MISSING]
-        invalid = [r for r in results if r.status == FieldStatus.INVALID]
-        ambiguous = [r for r in results if r.status == FieldStatus.AMBIGUOUS]
-
-        return ValidationResult(
-            is_valid=is_valid,
-            field_results=results,
-            missing_fields=missing,
-            invalid_fields=invalid,
-            ambiguous_fields=ambiguous,
-        )
-
-    def _suggest_category(self, bill_name: str) -> str:
-        """Suggest category based on bill name"""
-        if not bill_name:
-            return 'other'
-
-        name_lower = bill_name.lower()
-
-        if any(word in name_lower for word in ['điện', 'nước', 'gas', 'internet', 'điện thoại']):
-            return 'utilities'
-        elif any(word in name_lower for word in ['nhà', 'rent', 'thuê']):
-            return 'rent'
-        elif any(word in name_lower for word in ['bảo hiểm', 'insurance']):
-            return 'insurance'
-        elif any(word in name_lower for word in ['netflix', 'spotify', 'đăng ký', 'subscription']):
-            return 'subscription'
-        else:
-            return 'other'
-
-    # ========== Capability Resolution ==========
-
-    def resolve_capabilities(
-        self,
-        parameters: Dict[str, Any],
-        validation_result: ValidationResult,
-        state: BusinessState,
-    ) -> List[Capability]:
-        """Resolve capabilities for bill creation"""
-        capabilities = []
-
-        # If all required fields are valid, show preview
-        if validation_result.is_valid:
-            capabilities.append(
-                Capability(
-                    capability_type=CapabilityType.SHOW_FORM,
-                    data={
-                        'form_type': 'bill_preview',
-                        'fields': parameters,
-                        'schema': self.get_parameter_schema(),
-                    },
-                    message='Xem trước hóa đơn',
-                ),
-            )
-
-        return capabilities
-
     # ========== Execution ==========
 
     async def execute(
@@ -278,11 +85,7 @@ class CreateBillPlugin(IntentPlugin):
         parameters: Dict[str, Any],
         context: Dict[str, Any],
     ) -> ExecutionResult:
-        """Execute bill creation
-
-        Works for both:
-        1. Speech-to-input: Called by OrchestrationService after user confirms
-        2. Traditional API: Called directly from /bills endpoint
+        """Execute bill creation with inline validation
 
         Required in context:
         - user_id: User creating the bill
@@ -300,14 +103,37 @@ class CreateBillPlugin(IntentPlugin):
                     data={},
                 )
 
-            # Extract parameters
-            bill_name = parameters['bill_name']
-            amount = Decimal(str(parameters['amount']))
-            due_date_str = parameters['due_date']
-            category = parameters.get('category', self._suggest_category(bill_name))
-            is_recurring = parameters.get('recurring', False)
-            reminder_days = parameters.get('reminder_days', 3)
-            notes = parameters.get('notes', '')
+            # Validate and extract parameters
+            bill_name = parameters.get('bill_name', '').strip()
+            if not bill_name:
+                return ExecutionResult(
+                    success=False,
+                    message='Tên hóa đơn là bắt buộc',
+                    data={},
+                )
+
+            amount = parameters.get('amount')
+            if not amount:
+                return ExecutionResult(
+                    success=False,
+                    message='Số tiền là bắt buộc',
+                    data={},
+                )
+            if amount < 1000 or amount > 100000000:
+                return ExecutionResult(
+                    success=False,
+                    message='Số tiền phải từ 1,000 đến 100,000,000 VND',
+                    data={},
+                )
+            amount = Decimal(str(amount))
+
+            due_date_str = parameters.get('due_date')
+            if not due_date_str:
+                return ExecutionResult(
+                    success=False,
+                    message='Ngày hết hạn là bắt buộc',
+                    data={},
+                )
 
             # Parse due_date
             if isinstance(due_date_str, str):
@@ -326,6 +152,12 @@ class CreateBillPlugin(IntentPlugin):
                     )
             else:
                 due_date = due_date_str
+
+            # Optional parameters
+            category = parameters.get('category', 'other')
+            is_recurring = parameters.get('recurring', False)
+            reminder_days = parameters.get('reminder_days', 3)
+            notes = parameters.get('notes', '')
 
             # Create Bill entity
             bill = Bill(

@@ -113,3 +113,31 @@ def decode_access_token(token: str) -> Optional[TokenData]:
 
     except JWTError:
         return None
+
+
+def verify_token(token: str) -> TokenData:
+    """
+    Verify JWT token and return TokenData.
+    Raises exception if token is invalid.
+
+    Args:
+        token: JWT token string
+
+    Returns:
+        TokenData if valid
+
+    Raises:
+        ValueError: If token is invalid or expired
+    """
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get('sub')
+        user_id: str = payload.get('user_id')
+
+        if username is None or user_id is None:
+            raise ValueError('Invalid token payload')
+
+        return TokenData(username=username, user_id=user_id)
+
+    except JWTError as e:
+        raise ValueError(f'Invalid or expired token: {str(e)}')

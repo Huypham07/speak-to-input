@@ -15,10 +15,8 @@ from api.schemas import CreateFundRequest
 from api.schemas import FundDepositRequest
 from api.schemas import FundResponse
 from api.schemas import FundWithdrawRequest
-from application.use_cases.execute_plugin import execute_create_fund
-from application.use_cases.execute_plugin import execute_delete_fund
-from application.use_cases.execute_plugin import execute_deposit_fund
-from application.use_cases.execute_plugin import execute_withdraw_fund
+from application.use_cases import execute_plugin
+from domain.value_objects import IntentType
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
@@ -44,19 +42,23 @@ async def create_fund(
     """
     try:
         # Execute via plugin (same logic as speech)
-        result = await execute_create_fund(
-            user_id=int(current_user.user_id),
-            fund_name=request.fund_name,
-            target_amount=request.target_amount,
-            target_date=request.target_date,
-            category=request.category or 'other',
-            initial_amount=request.initial_amount,
-            monthly_contribution=request.monthly_contribution,
-            auto_transfer=request.auto_transfer,
-            notes=request.notes or '',
-            fund_repository=fund_repo,
-            account_repository=account_repo,
-            transaction_repository=transaction_repo,
+        result = await execute_plugin.execute(
+            intent_type=IntentType.CREATE_FUND.value,
+            parameters={
+                'fund_name': request.fund_name,
+                'target_amount': float(request.target_amount),
+                'target_date': request.target_date,
+                'initial_amount': float(request.initial_amount),
+                'monthly_contribution': float(request.monthly_contribution),
+                'category': request.category or 'other',
+                'auto_transfer': request.auto_transfer,
+                'notes': request.notes or '',
+            },
+            context={
+                'user_id': int(current_user.user_id),
+                'fund_repository': fund_repo,
+                'account_repository': account_repo,
+            },
         )
 
         if not result.success:
@@ -223,14 +225,18 @@ async def deposit_to_fund(
     """
     try:
         # Execute via plugin
-        result = await execute_deposit_fund(
-            user_id=int(current_user.user_id),
-            fund_id=fund_id,
-            amount=request.amount,
-            from_account_id=request.from_account_id,
-            fund_repository=fund_repo,
-            account_repository=account_repo,
-            transaction_repository=transaction_repo,
+        result = await execute_plugin.execute(
+            intent_type=IntentType.DEPOSIT_FUND.value,
+            parameters={
+                'fund_id': fund_id,
+                'amount': request.amount,
+                'from_account_id': request.from_account_id,
+            },
+            context={
+                'user_id': int(current_user.user_id),
+                'fund_repository': fund_repo,
+                'account_repository': account_repo,
+            },
         )
 
         if not result.success:
@@ -280,14 +286,18 @@ async def withdraw_from_fund(
     """
     try:
         # Execute via plugin
-        result = await execute_withdraw_fund(
-            user_id=int(current_user.user_id),
-            fund_id=fund_id,
-            amount=request.amount,
-            to_account_id=request.to_account_id,
-            fund_repository=fund_repo,
-            account_repository=account_repo,
-            transaction_repository=transaction_repo,
+        result = await execute_plugin.execute(
+            intent_type=IntentType.WITHDRAW_FUND.value,
+            parameters={
+                'fund_id': fund_id,
+                'amount': request.amount,
+                'to_account_id': request.to_account_id,
+            },
+            context={
+                'user_id': int(current_user.user_id),
+                'fund_repository': fund_repo,
+                'account_repository': account_repo,
+            },
         )
 
         if not result.success:
@@ -337,12 +347,17 @@ async def delete_fund(
     """
     try:
         # Execute via plugin
-        result = await execute_delete_fund(
-            user_id=int(current_user.user_id),
-            fund_id=fund_id,
-            fund_repository=fund_repo,
-            account_repository=account_repo,
-            transaction_repository=transaction_repo,
+        result = await execute_plugin.execute(
+            intent_type=IntentType.DELETE_FUND.value,
+            parameters={
+                'fund_id': fund_id,
+            },
+            context={
+                'user_id': int(current_user.user_id),
+                'fund_repository': fund_repo,
+                'account_repository': account_repo,
+                'transaction_repository': transaction_repo,
+            },
         )
 
         if not result.success:
