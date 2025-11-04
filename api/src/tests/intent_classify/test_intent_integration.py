@@ -1,9 +1,15 @@
 """
 Integration test for Intent Service with REAL Gemini API
-Chạy: python api/test_intent_integration.py
+Chạy từ thư mục api/src: python tests/intent_classify/test_intent_integration.py
 """
 import asyncio
 import sys
+from pathlib import Path
+
+current_file = Path(__file__).resolve()
+src_dir = current_file.parent.parent.parent
+if str(src_dir) not in sys.path:
+    sys.path.insert(0, str(src_dir))
 
 from shared.settings import Settings
 from infra.llm.llm_service import LLMService
@@ -56,6 +62,27 @@ async def test_real_intent_classification():
         },
         {
             "text": "Hôm nay thời tiết thế nào",
+            "expected_intent": "UNKNOWN",
+        },
+        # --- English test cases ---
+        {
+            "text": "Transfer 500 thousand to mom",
+            "expected_intent": "SEND_MONEY",
+        },
+        {
+            "text": "Check account balance",
+            "expected_intent": "CHECK_BALANCE",
+        },
+        {
+            "text": "Create an electricity bill for 200 thousand, due on the 15th",
+            "expected_intent": "CREATE_BILL",
+        },
+        {
+            "text": "Create a savings fund to buy a car, 50 million",
+            "expected_intent": "CREATE_FUND",
+        },
+        {
+            "text": "What's the weather like today?",
             "expected_intent": "UNKNOWN",
         },
     ]
@@ -164,6 +191,11 @@ async def test_normalize_amount():
         ("2,5 nghìn", 2500),
         ("500000", 500000),
         (500000, 500000),
+        # English forms
+        ("500 thousand", 500000),
+        ("1 million", 1000000),
+        ("1.5 million", 1500000),
+        ("2.5 thousand", 2500),
     ]
     
     passed = 0

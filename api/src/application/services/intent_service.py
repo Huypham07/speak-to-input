@@ -224,13 +224,22 @@ class IntentUnderstandingService:
         except ValueError:
             return 0.0
         
-        # Apply multiplier
-        if 'nghìn' in text or 'nghin' in text or 'k' in text:
+        # Apply multiplier (VN + EN)
+        text_no_space = text.replace(' ', '')
+
+        thousand_markers = [
+            'nghìn', 'nghin', 'k', 'thousand', 'ngàn', 'ngan'
+        ]
+        million_markers = [
+            'triệu', 'trieu', 'm', 'million', 'mn', 'mil'
+        ]
+
+        if any(marker in text for marker in thousand_markers) or any(marker in text_no_space for marker in thousand_markers):
             return base_number * 1_000
-        elif 'triệu' in text or 'trieu' in text or 'm' in text:
+        if any(marker in text for marker in million_markers) or any(marker in text_no_space for marker in million_markers):
             return base_number * 1_000_000
-        else:
-            return base_number
+
+        return base_number
 
     async def extract_clarification_data(
         self,
