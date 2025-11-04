@@ -58,6 +58,7 @@ async def create_fund(
                 'user_id': int(current_user.user_id),
                 'fund_repository': fund_repo,
                 'account_repository': account_repo,
+                'transaction_repository': transaction_repo,
             },
         )
 
@@ -236,6 +237,7 @@ async def deposit_to_fund(
                 'user_id': int(current_user.user_id),
                 'fund_repository': fund_repo,
                 'account_repository': account_repo,
+                'transaction_repository': transaction_repo,
             },
         )
 
@@ -297,6 +299,7 @@ async def withdraw_from_fund(
                 'user_id': int(current_user.user_id),
                 'fund_repository': fund_repo,
                 'account_repository': account_repo,
+                'transaction_repository': transaction_repo,
             },
         )
 
