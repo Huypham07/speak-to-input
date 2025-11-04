@@ -67,7 +67,7 @@ class LLMService:
         
         Args:
             messages: List of message dicts with 'role' and 'content'
-        
+
         Returns:
             Tuple (system_instruction, chat_messages)
         """
@@ -77,7 +77,7 @@ class LLMService:
         for msg in messages:
             role = msg.get('role')
             content = msg.get('content', '')
-            
+
             if role == 'system':
                 # Gemini uses systemInstruction separately
                 system_instruction = content
@@ -134,7 +134,7 @@ class LLMService:
         if not self.api_key:
             logger.error('Gemini API key not configured')
             return None
-            
+
         try:
             # Extract system instruction and messages
             system_instruction, chat_messages = self._prepare_messages_for_gemini(messages)
@@ -269,7 +269,7 @@ class LLMService:
     ) -> Optional[Dict[str, Any]]:
         """
         Call Gemini and parse JSON response
-        
+
         Returns:
             Parsed JSON dict or None if error
         """
@@ -278,29 +278,29 @@ class LLMService:
             temperature=temperature,
             response_format='json_object',
         )
-        
+
         if not response:
             return None
-            
+
         try:
             # Gemini with responseMimeType='application/json' should return valid JSON
             # But still clean in case of markdown wrapping
             cleaned_response = response.strip()
-            
+
             # Remove markdown code block markers if present
             if cleaned_response.startswith('```json'):
                 cleaned_response = cleaned_response[7:]
             elif cleaned_response.startswith('```'):
                 cleaned_response = cleaned_response[3:]
-            
+
             if cleaned_response.endswith('```'):
                 cleaned_response = cleaned_response[:-3]
-            
+
             cleaned_response = cleaned_response.strip()
-            
+
             # Parse JSON
             return json.loads(cleaned_response)
-            
+
         except json.JSONDecodeError as e:
             logger.error(f'Failed to parse Gemini JSON response: {e}')
             logger.error(f'Response was: {response}')

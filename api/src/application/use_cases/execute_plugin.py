@@ -138,3 +138,116 @@ async def execute_create_fund(
     }
 
     return await plugin.execute(parameters, context)
+
+
+async def execute_deposit_fund(
+    user_id: int,
+    fund_id: int,
+    amount: float,
+    from_account_id: int | None = None,
+    # Repositories
+    fund_repository=None,
+    account_repository=None,
+) -> ExecutionResult:
+    """Execute deposit to fund via plugin
+
+    This is called from:
+    1. OrchestrationService (speech-to-input flow)
+    2. POST /api/v1/funds/{fund_id}/deposit (traditional API)
+    """
+    plugin = get_intent_plugin(IntentType.DEPOSIT_FUND.value)
+
+    if not plugin:
+        return ExecutionResult(
+            success=False,
+            message='Deposit fund plugin not found',
+            data={},
+        )
+
+    parameters = {
+        'fund_id': fund_id,
+        'amount': amount,
+    }
+    if from_account_id:
+        parameters['from_account_id'] = from_account_id
+
+    context = {
+        'user_id': user_id,
+        'fund_repository': fund_repository,
+        'account_repository': account_repository,
+    }
+
+    return await plugin.execute(parameters, context)
+
+
+async def execute_withdraw_fund(
+    user_id: int,
+    fund_id: int,
+    amount: float,
+    to_account_id: int | None = None,
+    # Repositories
+    fund_repository=None,
+    account_repository=None,
+) -> ExecutionResult:
+    """Execute withdraw from fund via plugin
+
+    This is called from:
+    1. OrchestrationService (speech-to-input flow)
+    2. POST /api/v1/funds/{fund_id}/withdraw (traditional API)
+    """
+    plugin = get_intent_plugin(IntentType.WITHDRAW_FUND.value)
+
+    if not plugin:
+        return ExecutionResult(
+            success=False,
+            message='Withdraw fund plugin not found',
+            data={},
+        )
+
+    parameters = {
+        'fund_id': fund_id,
+        'amount': amount,
+    }
+    if to_account_id:
+        parameters['to_account_id'] = to_account_id
+
+    context = {
+        'user_id': user_id,
+        'fund_repository': fund_repository,
+        'account_repository': account_repository,
+    }
+
+    return await plugin.execute(parameters, context)
+
+
+async def execute_delete_fund(
+    user_id: int,
+    fund_id: int,
+    # Repository
+    fund_repository=None,
+) -> ExecutionResult:
+    """Execute delete fund via plugin
+
+    This is called from:
+    1. OrchestrationService (speech-to-input flow)
+    2. DELETE /api/v1/funds/{fund_id} (traditional API)
+    """
+    plugin = get_intent_plugin(IntentType.DELETE_FUND.value)
+
+    if not plugin:
+        return ExecutionResult(
+            success=False,
+            message='Delete fund plugin not found',
+            data={},
+        )
+
+    parameters = {
+        'fund_id': fund_id,
+    }
+
+    context = {
+        'user_id': user_id,
+        'fund_repository': fund_repository,
+    }
+
+    return await plugin.execute(parameters, context)

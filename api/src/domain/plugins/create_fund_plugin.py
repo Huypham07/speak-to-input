@@ -435,7 +435,7 @@ class CreateFundPlugin(IntentPlugin):
             if initial_amount > 0 and account_repo:
                 user_accounts = await account_repo.get_by_user_id(int(user_id))
                 if user_accounts:
-                    account_id = int(user_accounts[0].account_id)
+                    account_id = int(user_accounts[0].id)
 
                     # Check balance
                     if Decimal(str(user_accounts[0].balance)) < initial_amount:
@@ -477,7 +477,7 @@ class CreateFundPlugin(IntentPlugin):
 
                 # Deposit to fund
                 updated_fund = await fund_repo.deposit(
-                    fund_id=created_fund.fund_id,
+                    fund_id=created_fund.id,
                     amount=initial_amount,
                 )
                 created_fund = updated_fund
@@ -493,7 +493,7 @@ class CreateFundPlugin(IntentPlugin):
                 success=True,
                 message=message,
                 data={
-                    'fund_id': created_fund.fund_id,
+                    'fund_id': created_fund.id,
                     'fund_name': created_fund.fund_name,
                     'target_amount': float(created_fund.target_amount),
                     'current_amount': float(created_fund.current_amount),

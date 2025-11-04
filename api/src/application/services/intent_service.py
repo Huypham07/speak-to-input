@@ -47,65 +47,65 @@ class IntentUnderstandingService:
         self.settings = settings
         self.llm_service = llm_service or LLMService(settings)
         self.plugin_registry = plugin_registry
-        
+
         # Build system prompt with available intents from registry
         self._build_system_prompt()
 
     def _build_system_prompt(self):
         """Build system prompt dynamically from plugin registry"""
-        
+
         if not self.plugin_registry:
-            raise ValueError("Plugin registry is required for IntentUnderstandingService")
-        
+            raise ValueError('Plugin registry is required for IntentUnderstandingService')
+
         # Base prompt
         prompt_parts = [
-            "Bạn là trợ lý AI tài chính thông minh, chuyên phân tích ý định của khách hàng từ lệnh giọng nói.\n",
-            "\nCÁC INTENT HỖ TRỢ:",
+            'Bạn là trợ lý AI tài chính thông minh, chuyên phân tích ý định của khách hàng từ lệnh giọng nói.\n',
+            '\nCÁC INTENT HỖ TRỢ:',
         ]
-        
+
         # Get plugins from registry
         plugins = self.plugin_registry.list_plugins()
-        
+
         for idx, plugin in enumerate(plugins, start=1):
             # Get parameter schema
             schema = plugin.get_parameter_schema()
             properties = schema.get('properties', {})
             required_fields = schema.get('required', [])
-            
+
             # Build parameter description
             param_descriptions = []
             for param_name, param_info in properties.items():
                 is_required = param_name in required_fields
                 param_desc = param_info.get('description', param_name)
                 param_type = param_info.get('type', 'any')
-                
+
                 # Format: "field_name (type) - description [required/optional]"
-                requirement = "required" if is_required else "optional"
+                requirement = 'required' if is_required else 'optional'
                 param_descriptions.append(f"{param_name} ({param_type}, {requirement}): {param_desc}")
-            
-            params_str = "\n   ".join(param_descriptions) if param_descriptions else "không có parameters"
-            
+
+            params_str = '\n   '.join(param_descriptions) if param_descriptions else 'không có parameters'
+
             # Add to prompt
             prompt_parts.append(
-                f"\n{idx}. {plugin.intent_type} - {plugin.display_name}"
+                f"\n{idx}. {plugin.intent_type} - {plugin.display_name}",
             )
             if plugin.description:
                 prompt_parts.append(f"   Mô tả: {plugin.description}")
             prompt_parts.append(f"   Parameters:\n   {params_str}")
-        
+
         # Add UNKNOWN intent
         num_intents = len(plugins) + 1
         prompt_parts.append(f"\n{num_intents}. UNKNOWN - Không xác định được (dùng khi không match intent nào)")
-        
+
         # Add general notes
-        prompt_parts.append("\n\nCHÚ Ý:")
+        prompt_parts.append('\n\nCHÚ Ý:')
         prompt_parts.append("- Số tiền có thể viết: '500 nghìn', '5 triệu', '1.5 triệu', '500000'")
-        prompt_parts.append("- Số tiền LUÔN lưu dưới dạng VND đầy đủ (ví dụ: 500000, không phải 500)")
-        prompt_parts.append("- Người nhận có thể là tên, số tài khoản, hoặc mối quan hệ (mẹ, bố, anh, chị)")
+        prompt_parts.append('- Số tiền LUÔN lưu dưới dạng VND đầy đủ (ví dụ: 500000, không phải 500)')
+        prompt_parts.append('- Người nhận có thể là tên, số tài khoản, hoặc mối quan hệ (mẹ, bố, anh, chị)')
         prompt_parts.append("- Trả về JSON với format: {\"intent\": \"INTENT_TYPE\", \"confidence\": 0.0-1.0, \"parameters\": {...}}")
-        
-        self.system_prompt = "\n".join(prompt_parts)
-        
+
+        self.system_prompt = '\n'.join(prompt_parts)
+
         # Log the generated prompt for debugging
         logger.debug(f"Generated system prompt:\n{self.system_prompt}")
 
@@ -145,38 +145,38 @@ class IntentUnderstandingService:
     ) -> tuple[IntentType, Dict[str, Any], float]:
         """
         Classify intent using LLM and extract parameters.
-        
+
         Returns:
             (intent_type, parameters, confidence)
         """
-        
+
         # Build user message with context
         user_message = f"Phân tích lệnh: \"{text}\""
         if context:
             user_message += f"\n\nContext: {json.dumps(context, ensure_ascii=False)}"
-        
+
         messages = [
             {'role': 'system', 'content': self.system_prompt},
             {'role': 'user', 'content': user_message},
         ]
-        
+
         # Call LLM
         result = await self.llm_service.structured_completion(messages, temperature=0.3)
-        
+
         if not result:
             logger.warning('LLM returned no result, defaulting to UNKNOWN')
             return IntentType.UNKNOWN, {}, 0.0
-        
+
         # Parse result
         try:
             intent_str = result.get('intent', 'UNKNOWN')
             confidence = float(result.get('confidence', 0.0))
             parameters = result.get('parameters', {})
-            
+
             # Normalize amount if present (convert Vietnamese text to number)
             if 'amount' in parameters:
                 parameters['amount'] = self._normalize_amount(parameters['amount'])
-            
+
             # Convert intent string to enum
             try:
                 intent_type = IntentType(intent_str)
@@ -184,12 +184,12 @@ class IntentUnderstandingService:
                 logger.warning(f'Unknown intent: {intent_str}')
                 intent_type = IntentType.UNKNOWN
                 confidence = 0.0
-            
+
             logger.info(f'Classified: {intent_type.value} (confidence: {confidence:.2f})')
             logger.info(f'Parameters: {parameters}')
-            
+
             return intent_type, parameters, confidence
-            
+
         except Exception as e:
             logger.error(f'Failed to parse LLM result: {e}', exc_info=True)
             return IntentType.UNKNOWN, {}, 0.0
@@ -197,7 +197,7 @@ class IntentUnderstandingService:
     def _normalize_amount(self, amount_value: Any) -> float:
         """
         Normalize amount from various formats to number.
-        
+
         Examples:
             "500 nghìn" -> 500000
             "1.5 triệu" -> 1500000
@@ -206,18 +206,18 @@ class IntentUnderstandingService:
         """
         if isinstance(amount_value, (int, float)):
             return float(amount_value)
-        
+
         if not isinstance(amount_value, str):
             return 0.0
-        
+
         text = amount_value.lower().strip()
-        
+
         # Extract number
         import re
         number_match = re.search(r'[\d.,]+', text)
         if not number_match:
             return 0.0
-        
+
         number_str = number_match.group().replace(',', '.')
         try:
             base_number = float(number_str)

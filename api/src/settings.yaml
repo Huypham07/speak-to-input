@@ -13,7 +13,7 @@ secret_key: sti-team-24
 
 whisper:
   host: http://localhost
-  port: 8080
+  port: 8081
 
 llm:
   provider: gemini # gemini or bedrock
