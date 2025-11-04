@@ -36,7 +36,7 @@ class VoiceService:
                 logger.info(f"Model loaded: {model_path}")
                 return True
 
-    async def speech_to_text(self, audio_data: str) -> tuple[str, float]:
+    async def speech_to_text(self, audio_bytes: bytes) -> tuple[str, float]:
         """
         Convert audio to text using ASR.
 
@@ -46,12 +46,6 @@ class VoiceService:
         Returns:
             (text, confidence)
         """
-        # TODO: Implement ASR
-        # - Decode base64 audio
-        # - Call ASR service
-        # - Return text and confidence
-        audio_bytes = base64.b64decode(audio_data)
-
     # Giữ file lại (delete=False) để có thể reopen
         with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp_file:
             tmp_file.write(audio_bytes)
@@ -115,7 +109,7 @@ class VoiceService:
 
     async def process(
         self,
-        audio_data: str,
+        audio_bytes: bytes,
     ) -> tuple[str, str, float]:
         """
         Process audio input.
@@ -127,7 +121,7 @@ class VoiceService:
             (original_text, normalized_text, confidence)
         """
         # Step 1: ASR
-        asr_text, confidence = await self.speech_to_text(audio_data)
+        asr_text, confidence = await self.speech_to_text(audio_bytes)
 
         # Step 2: Normalize
         normalized = await self.normalize_text(asr_text)

@@ -3,7 +3,11 @@ from __future__ import annotations
 from .business_state import BusinessState
 from .capability import Capability
 from .execution_result import ExecutionResult
+from .field_validation import AMBIGUOUSFieldError
 from .field_validation import FieldValidation
+from .field_validation import InvalidFieldError
+from .field_validation import map_validation_errors
+from .field_validation import MissingFieldError
 from .field_validation import ValidationResult
 from .session import Session
 from .transaction import Bill
@@ -28,4 +32,8 @@ __all__ = [
     'Bill',
     'SavingsFund',
     'FundTransaction',
+    'map_validation_errors',
+    'MissingFieldError',
+      'InvalidFieldError',
+        'AMBIGUOUSFieldError',
 ]

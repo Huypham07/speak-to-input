@@ -161,7 +161,7 @@ class SendMoneyPlugin(IntentPlugin):
                 if field.field_name == 'amount':
                     capabilities.append(
                         Capability(
-                            capability_type=CapabilityType.REQUEST_FIELD,
+                            capability_type=CapabilityType.REQUEST_INPUT,
                             priority=1,
                             data={
                                 'field': 'amount',
@@ -205,6 +205,7 @@ class SendMoneyPlugin(IntentPlugin):
         - contact_repository: ContactRepository instance
         """
         try:
+
             # Get repositories from context
             transaction_repo = context.get('transaction_repository')
             account_repo = context.get('account_repository')

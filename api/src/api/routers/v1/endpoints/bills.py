@@ -9,6 +9,7 @@ from api.helpers.dependencies import get_current_user
 from api.helpers.jwt_auth import TokenData
 from api.schemas import BillResponse
 from api.schemas import CreateBillRequest
+from application.use_cases.execute_plugin import execute_create_bill
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
@@ -28,19 +29,44 @@ async def create_bill(
     Create a new bill (Traditional API).
     Uses the SAME business logic as speech-to-input.
     """
+    # reminder_days: 3, status: pending, paid_at ??
 
     # Execute via plugin (same logic as speech)
     # TODO: Implement
     # return mock response for now
+    try:
 
-    return BillResponse(
-        bill_id=123,
-        bill_name=request.title,
-        amount=request.amount,
-        due_date=request.due_date,
-        category=request.category,
-        status='pending',
-    )
+        new_bill = await execute_create_bill(
+            user_id=current_user.user_id,
+            bill_name=request.title,
+            amount=request.amount,
+            due_date=request.due_date,
+            category=request.category,
+            recurring=request.recurring,
+            notes=request.description,
+            bill_repository=bill_repo,
+        )
+        if not new_bill.success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=new_bill.message,
+            )
+        data = new_bill.data
+        return BillResponse(
+            bill_id=data['bill_id'],
+            bill_name=data['bill_name'],
+            amount=data['amount'],
+            due_date=data['due_date'],
+            category=data['category'],
+            status=data['status'],
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f'Create bill failed: {str(e)}',
+        )
 
 
 @router.get('', response_model=List[BillResponse])
