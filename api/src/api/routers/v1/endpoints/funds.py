@@ -8,6 +8,7 @@ from typing import List
 
 from api.dependencies import get_account_repository
 from api.dependencies import get_fund_repository
+from api.dependencies import get_transaction_repository
 from api.helpers.dependencies import get_current_user
 from api.helpers.jwt_auth import TokenData
 from api.schemas import CreateFundRequest
@@ -24,6 +25,7 @@ from fastapi import HTTPException
 from fastapi import status
 from infra.db.repositories import AccountRepository
 from infra.db.repositories import SavingsFundRepository
+from infra.db.repositories import TransactionRepository
 
 router = APIRouter(prefix='/funds', tags=['Savings Funds'])
 
@@ -34,6 +36,7 @@ async def create_fund(
     current_user: TokenData = Depends(get_current_user),
     fund_repo: SavingsFundRepository = Depends(get_fund_repository),
     account_repo: AccountRepository = Depends(get_account_repository),
+    transaction_repo: TransactionRepository = Depends(get_transaction_repository),
 ):
     """
     Create a new savings fund (Traditional API).
@@ -53,6 +56,7 @@ async def create_fund(
             notes=request.notes or '',
             fund_repository=fund_repo,
             account_repository=account_repo,
+            transaction_repository=transaction_repo,
         )
 
         if not result.success:
@@ -211,7 +215,7 @@ async def deposit_to_fund(
     current_user: TokenData = Depends(get_current_user),
     fund_repo: SavingsFundRepository = Depends(get_fund_repository),
     account_repo: AccountRepository = Depends(get_account_repository),
-    transaction_repo=None,  # TODO: Add transaction repository if needed for transaction records
+    transaction_repo: TransactionRepository = Depends(get_transaction_repository),
 ):
     """
     Deposit money to fund (Traditional API).
@@ -226,6 +230,7 @@ async def deposit_to_fund(
             from_account_id=request.from_account_id,
             fund_repository=fund_repo,
             account_repository=account_repo,
+            transaction_repository=transaction_repo,
         )
 
         if not result.success:
@@ -267,6 +272,7 @@ async def withdraw_from_fund(
     current_user: TokenData = Depends(get_current_user),
     fund_repo: SavingsFundRepository = Depends(get_fund_repository),
     account_repo: AccountRepository = Depends(get_account_repository),
+    transaction_repo: TransactionRepository = Depends(get_transaction_repository),
 ):
     """
     Withdraw money from fund (Traditional API).
@@ -281,6 +287,7 @@ async def withdraw_from_fund(
             to_account_id=request.to_account_id,
             fund_repository=fund_repo,
             account_repository=account_repo,
+            transaction_repository=transaction_repo,
         )
 
         if not result.success:
@@ -320,10 +327,13 @@ async def delete_fund(
     fund_id: int,
     current_user: TokenData = Depends(get_current_user),
     fund_repo: SavingsFundRepository = Depends(get_fund_repository),
+    account_repo: AccountRepository = Depends(get_account_repository),
+    transaction_repo: TransactionRepository = Depends(get_transaction_repository),
 ) -> Dict[str, Any]:
     """
     Delete fund (Traditional API).
     Requires authentication.
+    If fund has balance, it will be automatically returned to main account.
     """
     try:
         # Execute via plugin
@@ -331,6 +341,8 @@ async def delete_fund(
             user_id=int(current_user.user_id),
             fund_id=fund_id,
             fund_repository=fund_repo,
+            account_repository=account_repo,
+            transaction_repository=transaction_repo,
         )
 
         if not result.success:

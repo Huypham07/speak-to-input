@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any
 from typing import Dict
 from typing import List
@@ -9,6 +10,7 @@ from domain.entities import Capability
 from domain.entities import ExecutionResult
 from domain.entities import FieldValidation
 from domain.entities import ValidationResult
+from domain.entities.transaction import Transaction
 from domain.value_objects import CapabilityType
 from domain.value_objects import FieldStatus
 
@@ -128,13 +130,16 @@ class DeleteFundPlugin(IntentPlugin):
         Required in context:
         - user_id: User performing the deletion
         - fund_repository: SavingsFundRepository instance
+        - account_repository: AccountRepository instance (required to return balance to main account)
+        - transaction_repository: TransactionRepository instance (optional, for transaction records)
         """
         try:
-            # Get repositories from context
             fund_repo = context.get('fund_repository')
+            account_repo = context.get('account_repository')
+            transaction_repo = context.get('transaction_repository')
             user_id = context.get('user_id')
 
-            if not fund_repo or not user_id:
+            if not fund_repo or not user_id or not account_repo:
                 return ExecutionResult(
                     success=False,
                     message='Missing required dependencies in context',
@@ -161,18 +166,62 @@ class DeleteFundPlugin(IntentPlugin):
                     data={},
                 )
 
-            # Check if fund has balance
+            # If fund has balance, return it to main account
+            refund_message = ''
+            refunded_amount = 0.0
             if fund.current_amount > 0:
-                return ExecutionResult(
-                    success=False,
-                    message='Không thể xóa quỹ có số dư. Vui lòng rút hết tiền trước khi xóa.',
-                    data={},
+                # Save amount before withdrawing
+                refunded_amount = float(fund.current_amount)
+
+                # Get user's main account (first account)
+                user_accounts = await account_repo.get_by_user_id(int(user_id))
+                if not user_accounts:
+                    return ExecutionResult(
+                        success=False,
+                        message='Không tìm thấy tài khoản để trả tiền',
+                        data={},
+                    )
+
+                main_account = user_accounts[0]
+
+                # Withdraw from fund (this will set current_amount to 0)
+                await fund_repo.withdraw(
+                    fund_id=fund_id,
+                    amount=Decimal(str(refunded_amount)),
                 )
+
+                # Add to main account
+                await account_repo.update_balance(
+                    account_id=main_account.id,
+                    amount=Decimal(str(refunded_amount)),
+                    operation='add',
+                )
+
+                # Create transaction record for refund
+                if transaction_repo:
+                    transaction = Transaction(
+                        user_id=int(user_id),
+                        from_account_id=None,  # Fund is not an account
+                        to_account_id=main_account.id,
+                        transaction_type='deposit',
+                        amount=Decimal(str(refunded_amount)),
+                        currency='VND',
+                        message=f'Trả tiền từ quỹ "{fund.fund_name}" (đã xóa) về tài khoản chính',
+                        status='completed',
+                        extra_data={
+                            'fund_id': fund_id,
+                            'fund_name': fund.fund_name,
+                            'transaction_category': 'fund_delete_refund',
+                        },
+                    )
+                    await transaction_repo.create(transaction)
+
+                refund_message = f'Tự động trả {refunded_amount:,.0f} VND về tài khoản chính.'
 
             # Delete fund
             await fund_repo.delete_by_id(fund_id)
 
-            message = f'Đã xóa quỹ tiết kiệm "{fund.fund_name}" thành công'
+            message = f'Đã xóa quỹ tiết kiệm "{fund.fund_name}" thành công.{refund_message}'
 
             return ExecutionResult(
                 success=True,
@@ -180,6 +229,7 @@ class DeleteFundPlugin(IntentPlugin):
                 data={
                     'fund_id': fund_id,
                     'deleted': True,
+                    'refunded_amount': refunded_amount,
                 },
             )
 
