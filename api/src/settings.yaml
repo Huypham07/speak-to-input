@@ -16,6 +16,10 @@ whisper:
   port: 8081
 
 llm:
-  api_key: ""
+  provider: gemini # gemini or bedrock
   model: gemini-2.5-flash
-  base_url: https://generativelanguage.googleapis.com
+  api_key: ""
+  # AWS Bedrock settings
+  aws_region: us-east-1
+  aws_access_key_id: ""
+  aws_secret_access_key: ""
