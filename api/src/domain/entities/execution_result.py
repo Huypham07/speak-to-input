@@ -8,7 +8,6 @@ from pydantic import BaseModel
 
 class ExecutionResult(BaseModel):
     """Result of executing an intent"""
-
     success: bool
     message: str
 

@@ -83,6 +83,7 @@ class SendMoneyPlugin(IntentPlugin):
         - contact_repository: ContactRepository instance
         """
         try:
+
             # Get repositories from context
             transaction_repo = context.get('transaction_repository')
             account_repo = context.get('account_repository')

@@ -2,20 +2,86 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
+from typing import Annotated
 from typing import Any
 from typing import Dict
+from typing import Literal
+from typing import Optional
 
 from domain.entities import Bill
 from domain.entities import ExecutionResult
 from domain.value_objects import IntentType
+from pydantic import BaseModel
+from pydantic import Field
 
 from .base_intent_plugin import IntentPlugin
 
 
+class BillValidation(BaseModel):
+    bill_name: Annotated[
+        str,
+        Field(description='Bill name (e.g., "Tiền điện", "Tiền nước")', min_length=1, max_length=100),
+    ]
+
+    amount: Annotated[
+        float,
+        Field(description='Bill amount in VND', ge=1000, le=100_000_000),
+    ]
+
+    due_date: Annotated[
+        datetime,
+        Field(description='Due date (YYYY-MM-DD)'),
+    ]
+
+    category: Optional[
+        Literal['utilities', 'rent', 'insurance', 'subscription', 'other']
+    ] = Field(
+        None,
+        description='Bill category',
+        json_schema_extra={
+            'options': [
+                {'value': 'utilities', 'label': 'Tiện ích (điện, nước, gas)'},
+                {'value': 'rent', 'label': 'Tiền nhà'},
+                {'value': 'insurance', 'label': 'Bảo hiểm'},
+                {'value': 'subscription', 'label': 'Dịch vụ đăng ký'},
+                {'value': 'other', 'label': 'Khác'},
+            ],
+        },
+    )
+
+    recurring: bool = Field(default=False, description='Whether bill recurs monthly')
+
+    reminder_days: Annotated[
+        int,
+        Field(ge=0, le=30, description='Days before due date to remind'),
+    ] = 3
+
+    notes: Optional[
+        Annotated[str, Field(max_length=500, description='Additional notes')]
+    ] = None
+
+    @staticmethod
+    def _suggest_category(bill_name: str) -> str:
+        """Suggest category based on bill name"""
+        if not bill_name:
+            return 'other'
+
+        name_lower = bill_name.lower()
+
+        if any(word in name_lower for word in ['điện', 'nước', 'gas', 'internet', 'điện thoại']):
+            return 'utilities'
+        elif any(word in name_lower for word in ['nhà', 'rent', 'thuê']):
+            return 'rent'
+        elif any(word in name_lower for word in ['bảo hiểm', 'insurance']):
+            return 'insurance'
+        elif any(word in name_lower for word in ['netflix', 'spotify', 'đăng ký', 'subscription']):
+            return 'subscription'
+        else:
+            return 'other'
+
+
 class CreateBillPlugin(IntentPlugin):
     """Plugin for CREATE_BILL intent"""
-
-    # ========== Metadata ==========
 
     @property
     def intent_type(self) -> str:
@@ -32,51 +98,7 @@ class CreateBillPlugin(IntentPlugin):
     # ========== Parameter Schema ==========
 
     def get_parameter_schema(self) -> Dict[str, Any]:
-        return {
-            'type': 'object',
-            'required': ['bill_name', 'amount', 'due_date'],
-            'properties': {
-                'bill_name': {
-                    'type': 'string',
-                    'description': 'Bill name (e.g., "Tiền điện", "Tiền nước")',
-                    'minLength': 1,
-                    'maxLength': 100,
-                },
-                'amount': {
-                    'type': 'number',
-                    'minimum': 1000,
-                    'maximum': 100000000,
-                    'description': 'Bill amount in VND',
-                },
-                'due_date': {
-                    'type': 'string',
-                    'format': 'date',
-                    'description': 'Due date (YYYY-MM-DD)',
-                },
-                'category': {
-                    'type': 'string',
-                    'enum': ['utilities', 'rent', 'insurance', 'subscription', 'other'],
-                    'description': 'Bill category',
-                },
-                'recurring': {
-                    'type': 'boolean',
-                    'description': 'Whether bill recurs monthly',
-                    'default': False,
-                },
-                'reminder_days': {
-                    'type': 'integer',
-                    'minimum': 0,
-                    'maximum': 30,
-                    'description': 'Days before due date to remind',
-                    'default': 3,
-                },
-                'notes': {
-                    'type': 'string',
-                    'maxLength': 500,
-                    'description': 'Additional notes',
-                },
-            },
-        }
+        return BillValidation.model_json_schema()
 
     # ========== Execution ==========
 
@@ -96,12 +118,16 @@ class CreateBillPlugin(IntentPlugin):
             bill_repo = context.get('bill_repository')
             user_id = context.get('user_id')
 
-            if not bill_repo or not user_id:
+            if not all([bill_repo, user_id]):
                 return ExecutionResult(
                     success=False,
                     message='Missing required dependencies in context',
                     data={},
                 )
+
+            # Type assertions after null check
+            assert bill_repo is not None
+            assert user_id is not None
 
             # Validate and extract parameters
             bill_name = parameters.get('bill_name', '').strip()
@@ -180,15 +206,7 @@ class CreateBillPlugin(IntentPlugin):
             return ExecutionResult(
                 success=True,
                 message=f'Đã tạo hóa đơn "{bill_name}" với số tiền {amount:,} VND, hạn thanh toán {due_date.strftime("%d/%m/%Y")}',
-                data={
-                    'bill_id': created_bill.bill_id,
-                    'bill_name': created_bill.bill_name,
-                    'amount': float(created_bill.amount),
-                    'due_date': created_bill.due_date.isoformat(),
-                    'category': created_bill.category,
-                    'is_recurring': created_bill.is_recurring,
-                    'status': created_bill.status,
-                },
+                data=created_bill.__dict__,
             )
 
         except Exception as e:

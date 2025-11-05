@@ -27,7 +27,7 @@ export function Navbar() {
   const navItems = [
     { href: "/dashboard", icon: Home, label: "Trang chủ" },
     { href: "/accounts?action=transfer", icon: Send, label: "Chuyển tiền" },
-    { href: "/dashboard?tab=bills", icon: FileText, label: "Hóa đơn" },
+    { href: "/bills", icon: FileText, label: "Hóa đơn" },
     { href: "/funds", icon: PiggyBank, label: "Tiết kiệm" },
   ];
 

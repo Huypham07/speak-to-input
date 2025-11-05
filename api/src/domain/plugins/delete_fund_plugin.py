@@ -63,12 +63,18 @@ class DeleteFundPlugin(IntentPlugin):
             transaction_repo = context.get('transaction_repository')
             user_id = context.get('user_id')
 
-            if not fund_repo or not account_repo or not transaction_repo or not user_id:
+            if not all([fund_repo, account_repo, transaction_repo, user_id]):
                 return ExecutionResult(
                     success=False,
                     message='Missing required dependencies in context',
                     data={},
                 )
+
+            # Type assertions after null check
+            assert fund_repo is not None
+            assert transaction_repo is not None
+            assert account_repo is not None
+            assert user_id is not None
 
             # Validate and extract parameters
             fund_id = parameters.get('fund_id')
