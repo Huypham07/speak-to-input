@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Optional
 
+from pydantic import ConfigDict
 from pydantic import Field
 from shared.base import BaseModel
 
@@ -32,11 +34,11 @@ class TransferResponse(BaseModel):
 
 class CreateBillRequest(BaseModel):
     """Request to create a bill"""
-    title: str = Field(..., min_length=1, max_length=200)
+    bill_name: str = Field(..., min_length=1, max_length=200)
     category: str
     amount: float = Field(..., gt=0)
     due_date: str = Field(..., description='Due date in YYYY-MM-DD format')
-    description: Optional[str] = None
+    notes: Optional[str] = None
     recurring: bool = Field(False)
     recurring_interval: Optional[str] = Field(None, description='daily, weekly, monthly, yearly')
 
@@ -44,15 +46,18 @@ class CreateBillRequest(BaseModel):
 class BillResponse(BaseModel):
     """Bill response"""
     id: int
-    title: str
-    category: str
+    bill_name: str
+    category: Optional[str] = None
     amount: float
-    due_date: str
+    due_date: datetime
     status: str  # pending, paid, overdue
-    description: Optional[str]
-    recurring: bool
-    recurring_interval: Optional[str]
-    created_at: str
+    notes: Optional[str] = None
+    is_recurring: bool = False
+    recurrence_interval: Optional[str] = None
+    reminder_days: int = 3
+    paid_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
 
 
 # ========== Savings Fund Schemas ==========

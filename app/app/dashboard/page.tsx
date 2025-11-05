@@ -10,8 +10,6 @@ import { StatisticsOverview } from "@/components/dashboard/statistics-overview";
 import { TransfersList } from "@/components/dashboard/transfers-list";
 import { BillsList } from "@/components/dashboard/bills-list";
 import { FundsList } from "@/components/dashboard/funds-list";
-import { FundForm } from "@/components/financial/fund-form";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SpeechResultModal } from "@/components/speech/speech-result-modal";
 import { useSpeech } from "@/lib/speech-context";
 import { useFinancial } from "@/lib/financial-context";
@@ -31,7 +29,6 @@ export default function DashboardPage() {
   const router = useRouter();
   const { transcript } = useSpeech();
   const { addTransfer, addBill, addFund } = useFinancial();
-  const [isCreatingFund, setIsCreatingFund] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -51,11 +48,11 @@ export default function DashboardPage() {
         break;
       case "bill":
         addBill({
-          title: data.title,
+          bill_name: data.bill_name,
           category: data.category,
           amount: data.amount,
           dueDate: data.dueDate,
-          description: data.description || "",
+          notes: data.notes || "",
           status: "pending",
           tags: [],
         });
@@ -131,22 +128,9 @@ export default function DashboardPage() {
           </div>
 
           {/* Funds */}
-          <FundsList onCreateFund={() => setIsCreatingFund(true)} />
+          <FundsList />
         </div>
       </main>
-
-      {/* Create Fund Modal */}
-      <Dialog open={isCreatingFund} onOpenChange={setIsCreatingFund}>
-        <DialogContent className="max-w-2xl w-[95vw] sm:w-full max-h-[85vh] sm:max-h-[90vh] flex flex-col p-0 rounded-xl sm:rounded-2xl gap-0">
-          <DialogHeader className="px-4 sm:px-6 pt-4 sm:pt-6 pb-3 sm:pb-4 border-b shrink-0">
-            <DialogTitle className="text-lg sm:text-xl">Tạo quỹ tiết kiệm</DialogTitle>
-          </DialogHeader>
-          <div className="overflow-y-auto flex-1 px-4 sm:px-6 pt-3 sm:pt-4">
-            <FundForm onSuccess={() => setIsCreatingFund(false)} />
-          </div>
-        </DialogContent>
-      </Dialog>
-
       {transcript && <SpeechResultModal onCommandMatched={handleCommandMatched} onClose={() => {}} />}
     </div>
   );

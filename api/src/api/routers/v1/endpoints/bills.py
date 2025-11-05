@@ -4,17 +4,22 @@ from typing import Any
 from typing import Dict
 from typing import List
 
+from api.dependencies import get_account_repository
 from api.dependencies import get_bill_repository
+from api.dependencies import get_transaction_repository
 from api.helpers.dependencies import get_current_user
 from api.helpers.jwt_auth import TokenData
 from api.schemas import BillResponse
 from api.schemas import CreateBillRequest
-from application.use_cases.execute_plugin import execute_create_bill
+from application.use_cases import execute_plugin
+from domain.value_objects import IntentType
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import status
+from infra.db.repositories import AccountRepository
 from infra.db.repositories import BillRepository
+from infra.db.repositories import TransactionRepository
 
 router = APIRouter(prefix='/bills', tags=['Bills'])
 
@@ -29,37 +34,31 @@ async def create_bill(
     Create a new bill (Traditional API).
     Uses the SAME business logic as speech-to-input.
     """
-    # reminder_days: 3, status: pending, paid_at ??
-
-    # Execute via plugin (same logic as speech)
-    # TODO: Implement
-    # return mock response for now
     try:
 
-        new_bill = await execute_create_bill(
-            user_id=current_user.user_id,
-            bill_name=request.title,
-            amount=request.amount,
-            due_date=request.due_date,
-            category=request.category,
-            recurring=request.recurring,
-            notes=request.description,
-            bill_repository=bill_repo,
+        result = await execute_plugin.execute(
+            intent_type=IntentType.CREATE_BILL.value,
+            parameters={
+                'bill_name': request.bill_name,
+                'amount': request.amount,
+                'due_date': request.due_date,
+                'category': request.category,
+                'recurring': request.recurring,
+                'notes': request.notes,
+            },
+            context={
+                'user_id': int(current_user.user_id),
+                'bill_repository': bill_repo,
+            },
         )
-        if not new_bill.success:
+        if not result.success:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=new_bill.message,
+                detail=result.message,
             )
-        data = new_bill.data
-        return BillResponse(
-            bill_id=data['bill_id'],
-            bill_name=data['bill_name'],
-            amount=data['amount'],
-            due_date=data['due_date'],
-            category=data['category'],
-            status=data['status'],
-        )
+
+        return BillResponse(**result.data)
+
     except HTTPException:
         raise
     except Exception as e:
@@ -119,35 +118,50 @@ async def get_bill(
 @router.post('/{bill_id}/pay')
 async def pay_bill(
     bill_id: int,
+    from_account_id: int | None = None,
     current_user: TokenData = Depends(get_current_user),
     bill_repo: BillRepository = Depends(get_bill_repository),
+    account_repo: AccountRepository = Depends(get_account_repository),
+    transaction_repo: TransactionRepository = Depends(get_transaction_repository),
 ) -> Dict[str, Any]:
-    """Mark bill as paid (Traditional API)"""
+    """Mark bill as paid and create transaction (Traditional API)"""
 
-    bill = await bill_repo.read_by_id(bill_id)
-
-    if not bill:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail='Bill not found',
+    try:
+        # Execute via plugin (same logic as speech)
+        result = await execute_plugin.execute(
+            intent_type=IntentType.PAY_BILL.value,
+            parameters={
+                'bill_id': bill_id,
+                'from_account_id': from_account_id,
+            },
+            context={
+                'user_id': int(current_user.user_id),
+                'bill_repository': bill_repo,
+                'account_repository': account_repo,
+                'transaction_repository': transaction_repo,
+            },
         )
 
-    # Check ownership
-    if bill.user_id != int(current_user.user_id):
+        if not result.success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=result.message,
+            )
+
+        return {
+            'bill_id': bill_id,
+            'success': True,
+            'message': 'Bill paid successfully',
+            'data': result.data,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail='Access denied',
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f'Pay bill failed: {str(e)}',
         )
-
-    # Mark as paid
-    updated_bill = await bill_repo.mark_as_paid(bill_id)
-
-    return {
-        'bill_id': updated_bill.bill_id,
-        'status': updated_bill.status,
-        'paid_at': updated_bill.paid_at.isoformat() if updated_bill.paid_at else None,
-        'message': f'Đã đánh dấu hóa đơn "{updated_bill.bill_name}" đã thanh toán',
-    }
 
 
 @router.delete('/{bill_id}')
@@ -178,6 +192,6 @@ async def delete_bill(
 
     return {
         'bill_id': bill_id,
-        'deleted': True,
+        'success': True,
         'message': 'Bill deleted successfully',
     }

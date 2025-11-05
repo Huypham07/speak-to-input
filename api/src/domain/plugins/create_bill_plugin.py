@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from datetime import date
 from datetime import datetime
 from decimal import Decimal
 from typing import Annotated
 from typing import Any
 from typing import Dict
-from typing import List
 from typing import Literal
 from typing import Optional
 
@@ -34,10 +32,6 @@ class BillValidation(BaseModel):
         datetime,
         Field(description='Due date (YYYY-MM-DD)'),
     ]
-
-    @property
-    def intent_type(self) -> str:
-        return IntentType.CREATE_BILL.value
 
     category: Optional[
         Literal['utilities', 'rent', 'insurance', 'subscription', 'other']
@@ -89,12 +83,9 @@ class BillValidation(BaseModel):
 class CreateBillPlugin(IntentPlugin):
     """Plugin for CREATE_BILL intent"""
 
-    def __init__(self):
-        self._bill_repo = None
-
     @property
     def intent_type(self) -> str:
-        return 'CREATE_BILL'
+        return IntentType.CREATE_BILL.value
 
     @property
     def display_name(self) -> str:
@@ -108,8 +99,6 @@ class CreateBillPlugin(IntentPlugin):
 
     def get_parameter_schema(self) -> Dict[str, Any]:
         return BillValidation.model_json_schema()
-
-    # ========== Validation ==========
 
     # ========== Execution ==========
 
@@ -129,12 +118,16 @@ class CreateBillPlugin(IntentPlugin):
             bill_repo = context.get('bill_repository')
             user_id = context.get('user_id')
 
-            if not bill_repo or not user_id:
+            if not all([bill_repo, user_id]):
                 return ExecutionResult(
                     success=False,
                     message='Missing required dependencies in context',
                     data={},
                 )
+
+            # Type assertions after null check
+            assert bill_repo is not None
+            assert user_id is not None
 
             # Validate and extract parameters
             bill_name = parameters.get('bill_name', '').strip()
@@ -213,15 +206,7 @@ class CreateBillPlugin(IntentPlugin):
             return ExecutionResult(
                 success=True,
                 message=f'Đã tạo hóa đơn "{bill_name}" với số tiền {amount:,} VND, hạn thanh toán {due_date.strftime("%d/%m/%Y")}',
-                data={
-                    'bill_id': created_bill.bill_id,
-                    'bill_name': created_bill.bill_name,
-                    'amount': float(created_bill.amount),
-                    'due_date': created_bill.due_date.isoformat(),
-                    'category': created_bill.category,
-                    'is_recurring': created_bill.is_recurring,
-                    'status': created_bill.status,
-                },
+                data=created_bill.__dict__,
             )
 
         except Exception as e:

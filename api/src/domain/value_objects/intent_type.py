@@ -11,6 +11,7 @@ class IntentType(str, Enum):
 
     # Financial management intents
     CREATE_BILL = 'CREATE_BILL'
+    PAY_BILL = 'PAY_BILL'
     CREATE_FUND = 'CREATE_FUND'
     DEPOSIT_FUND = 'DEPOSIT_FUND'
     WITHDRAW_FUND = 'WITHDRAW_FUND'

@@ -176,15 +176,15 @@
 }
 
 [data-sonner-toast][data-type="success"] {
-  background: rgb(145, 247, 227) !important;
-  color: rgb(4, 81, 88) !important;
-  border-color: rgb(5, 124, 188) !important;
+  background: rgb(236, 253, 245) !important;
+  color: rgb(6, 95, 70) !important;
+  border-color: rgb(141, 241, 194) !important;
 }
 
 .dark [data-sonner-toast][data-type="success"] {
-  background: rgb(2, 44, 34) !important;
+  background: rgb(6, 78, 59) !important;
   color: rgb(209, 250, 229) !important;
-  border-color: rgb(6, 78, 59) !important;
+  border-color: rgb(52, 211, 153) !important;
 }
 
 [data-sonner-toast][data-type="error"] {
