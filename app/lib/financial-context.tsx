@@ -3,6 +3,7 @@
 import type React from "react";
 import { createContext, useContext, useState, useCallback, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { fetchWithAuth } from "@/lib/fetch-auth";
 
 export interface Transfer {
   id: number;
@@ -83,7 +84,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const response = await fetch("/api/bills");
+      const response = await fetchWithAuth("/api/bills");
       if (response.ok) {
         const data = await response.json();
         // Transform API response to match ExpenseBill interface
@@ -118,7 +119,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
 
     setIsLoadingFunds(true);
     try {
-      const response = await fetch("/api/funds");
+      const response = await fetchWithAuth("/api/funds");
       if (response.ok) {
         const data = await response.json();
         setFunds(data);
@@ -160,7 +161,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
   const addBill = useCallback(
     async (bill: Omit<ExpenseBill, "id">) => {
       try {
-        const response = await fetch("/api/bills", {
+        const response = await fetchWithAuth("/api/bills", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -194,7 +195,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
     async (billId: number, fromAccountId?: number) => {
       try {
         const url = `/api/bills/${billId}/pay${fromAccountId ? `?from_account_id=${fromAccountId}` : ""}`;
-        const response = await fetch(url, {
+        const response = await fetchWithAuth(url, {
           method: "POST",
         });
 
@@ -225,7 +226,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
       notes?: string;
     }) => {
       try {
-        const response = await fetch("/api/funds", {
+        const response = await fetchWithAuth("/api/funds", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -263,7 +264,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
   const depositToFund = useCallback(
     async (fundId: number, amount: number, fromAccountId?: number) => {
       try {
-        const response = await fetch(`/api/funds/${fundId}/deposit`, {
+        const response = await fetchWithAuth(`/api/funds/${fundId}/deposit`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -294,7 +295,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
   const withdrawFromFund = useCallback(
     async (fundId: number, amount: number, toAccountId?: number) => {
       try {
-        const response = await fetch(`/api/funds/${fundId}/withdraw`, {
+        const response = await fetchWithAuth(`/api/funds/${fundId}/withdraw`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -324,7 +325,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
 
   const deleteFund = useCallback(async (fundId: number) => {
     try {
-      const response = await fetch(`/api/funds/${fundId}`, {
+      const response = await fetchWithAuth(`/api/funds/${fundId}`, {
         method: "DELETE",
       });
 

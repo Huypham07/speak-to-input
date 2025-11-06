@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Send } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { fetchWithAuth } from "@/lib/fetch-auth";
 
 interface TransferFormProps {
   accountId: number;
@@ -47,7 +48,7 @@ export function TransferForm({ accountId, currentBalance, onSuccess }: TransferF
     setLoading(true);
 
     try {
-      const response = await fetch(`/api/transfers`, {
+      const response = await fetchWithAuth(`/api/transfers`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

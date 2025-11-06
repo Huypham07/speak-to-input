@@ -6,6 +6,7 @@ import { LogOut, Home, Send, FileText, PiggyBank, Mic, Square, Settings, User, W
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSpeech } from "@/lib/speech-context";
+import { useFormContext } from "@/lib/form-context";
 import { useSidebar } from "@/lib/sidebar-context";
 import {
   DropdownMenu,
@@ -19,7 +20,8 @@ import {
 export function Navbar() {
   const { user, logout } = useAuth();
   const pathname = usePathname();
-  const { isListening, isProcessing, startListening, stopListening } = useSpeech();
+  const { isListening, isProcessing, startListening, stopListening, isConnected } = useSpeech();
+  const { currentForm } = useFormContext();
   const { isCollapsed, toggleSidebar } = useSidebar();
 
   if (!user) return null;
@@ -34,10 +36,20 @@ export function Navbar() {
   const isActive = (href: string) => pathname === href || pathname.startsWith(href);
 
   const handleSpeechClick = async () => {
+    console.log("🎤 Speech button clicked");
+    console.log("Current form:", currentForm);
+    console.log("Form type:", currentForm.type);
+    console.log("Form data keys:", Object.keys(currentForm.data));
+    console.log("Is listening:", isListening);
+    console.log("Is connected:", isConnected);
+    console.log("All cookies:", document.cookie);
+
     if (isListening) {
+      console.log("Stopping listening...");
       await stopListening();
     } else {
-      await startListening();
+      console.log("Starting listening with form data:", currentForm.data, "intent:", currentForm.type);
+      await startListening(currentForm.data, currentForm.type ?? undefined);
     }
   };
 

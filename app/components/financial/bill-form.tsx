@@ -1,8 +1,10 @@
 "use client";
 
 import type React from "react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useFinancial } from "@/lib/financial-context";
+import { useFormContext } from "@/lib/form-context";
+import { useSpeech } from "@/lib/speech-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -37,6 +39,20 @@ export function BillForm({ onSuccess }: { onSuccess: () => void }) {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(false);
   const { addBill, refreshBills } = useFinancial();
+  const { setCurrentForm, clearForm } = useFormContext();
+  const { isListening } = useSpeech();
+
+  // Update form context when form data changes
+  useEffect(() => {
+    setCurrentForm("CREATE_BILL", formData);
+  }, [formData, setCurrentForm]);
+
+  // Clear form context on unmount
+  useEffect(() => {
+    return () => {
+      clearForm();
+    };
+  }, [clearForm]);
 
   // Get minimum date (today) for date input
   const getMinDate = () => {
@@ -189,7 +205,7 @@ export function BillForm({ onSuccess }: { onSuccess: () => void }) {
           onChange={(e) => handleChange("bill_name", e.target.value)}
           onBlur={() => handleBlur("bill_name")}
           className={errors.bill_name && touched.bill_name ? "border-red-500" : ""}
-          disabled={isLoading}
+          disabled={isLoading || isListening}
         />
         {errors.bill_name && touched.bill_name && <p className="text-sm text-red-500">{errors.bill_name}</p>}
       </div>
@@ -209,7 +225,7 @@ export function BillForm({ onSuccess }: { onSuccess: () => void }) {
             onChange={(e) => handleChange("amount", e.target.value)}
             onBlur={() => handleBlur("amount")}
             className={errors.amount && touched.amount ? "border-red-500" : ""}
-            disabled={isLoading}
+            disabled={isLoading || isListening}
           />
           {errors.amount && touched.amount && <p className="text-sm text-red-500">{errors.amount}</p>}
         </div>
@@ -227,7 +243,7 @@ export function BillForm({ onSuccess }: { onSuccess: () => void }) {
             onChange={(e) => handleChange("due_date", e.target.value)}
             onBlur={() => handleBlur("due_date")}
             className={errors.due_date && touched.due_date ? "border-red-500" : ""}
-            disabled={isLoading}
+            disabled={isLoading || isListening}
           />
           {errors.due_date && touched.due_date && <p className="text-sm text-red-500">{errors.due_date}</p>}
         </div>
@@ -243,7 +259,7 @@ export function BillForm({ onSuccess }: { onSuccess: () => void }) {
           className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
           value={formData.category}
           onChange={(e) => handleChange("category", e.target.value)}
-          disabled={isLoading}>
+          disabled={isLoading || isListening}>
           {BILL_CATEGORIES.map((cat) => (
             <option key={cat.value} value={cat.value}>
               {cat.label}
@@ -258,7 +274,7 @@ export function BillForm({ onSuccess }: { onSuccess: () => void }) {
           id="recurring"
           checked={formData.recurring}
           onChange={(e) => handleChange("recurring", e.target.checked)}
-          disabled={isLoading}
+          disabled={isLoading || isListening}
         />
         <Label
           htmlFor="recurring"
@@ -279,14 +295,14 @@ export function BillForm({ onSuccess }: { onSuccess: () => void }) {
           onChange={(e) => handleChange("notes", e.target.value)}
           rows={3}
           className="resize-none"
-          disabled={isLoading}
+          disabled={isLoading || isListening}
         />
         <p className="text-xs text-muted-foreground">Tối đa 500 ký tự</p>
       </div>
 
       {/* Submit Button */}
       <div className="pt-4">
-        <Button type="submit" className="w-full" disabled={isLoading}>
+        <Button type="submit" className="w-full" disabled={isLoading || isListening}>
           {isLoading ? "Đang tạo..." : "Tạo hóa đơn"}
         </Button>
       </div>

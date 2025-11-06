@@ -2,43 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-async function refreshAccessToken(request: NextRequest): Promise<{
-  success: boolean;
-  newToken?: string;
-  setCookie?: string;
-}> {
-  try {
-    const refreshToken = request.cookies.get("refresh_token")?.value;
-
-    if (!refreshToken) {
-      return { success: false };
-    }
-
-    const response = await fetch(`${API_URL}/api/v1/auth/refresh`, {
-      method: "POST",
-      headers: {
-        Cookie: `refresh_token=${refreshToken}`,
-      },
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      const setCookieHeader = response.headers.get("set-cookie");
-
-      return {
-        success: true,
-        newToken: data.access_token,
-        setCookie: setCookieHeader || undefined,
-      };
-    }
-
-    return { success: false };
-  } catch (error) {
-    console.error("Token refresh failed:", error);
-    return { success: false };
-  }
-}
-
 export async function authenticatedFetch(
   request: NextRequest,
   endpoint: string,
@@ -67,23 +30,9 @@ export async function authenticatedFetch(
     headers,
   });
 
-  // If 401, try to refresh token and retry ONCE
-  if (response.status === 401) {
-    const refreshResult = await refreshAccessToken(request);
-
-    if (refreshResult.success && refreshResult.newToken) {
-      // Retry with new token
-      response = await fetch(`${API_URL}${endpoint}`, {
-        ...options,
-        headers: {
-          ...options.headers,
-          Authorization: `Bearer ${refreshResult.newToken}`,
-        },
-      });
-    }
-  }
-
-  return response;
+  const data = await response.json();
+  const nextResponse = NextResponse.json(data, { status: response.status });
+  return nextResponse;
 }
 
 /**

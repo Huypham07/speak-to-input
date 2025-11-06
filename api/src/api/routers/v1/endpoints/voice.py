@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import datetime
+import json
+import os
 from typing import Any
 from typing import Dict
 
-from api.dependencies import get_intent_service
-from api.dependencies import get_orchestration_service
-from api.dependencies import get_voice_service
+from api.dependencies import get_intent_service_ws
+from api.dependencies import get_orchestration_service_ws
+from api.dependencies import get_voice_service_ws
 from api.helpers.jwt_auth import verify_token
 from application.services.intent_service import IntentUnderstandingService
 from application.services.orchestration_service import OrchestrationService
@@ -48,9 +51,9 @@ manager = VoiceConnectionManager()
 async def voice_stream(
     websocket: WebSocket,
     token: str,
-    voice_service: VoiceService = Depends(get_voice_service),
-    intent_service: IntentUnderstandingService = Depends(get_intent_service),
-    orchestration_service: OrchestrationService = Depends(get_orchestration_service),
+    voice_service: VoiceService = Depends(get_voice_service_ws),
+    intent_service: IntentUnderstandingService = Depends(get_intent_service_ws),
+    orchestration_service: OrchestrationService = Depends(get_orchestration_service_ws),
 ):
     """
     WebSocket endpoint for voice input streaming.
@@ -74,145 +77,103 @@ async def voice_stream(
         }
 
         while True:
-            # Receive data from frontend
-            data = await websocket.receive_json()
-            message_type = data.get('type')
+            try:
+                # Receive data from frontend
+                message = await websocket.receive()
 
-            if message_type == 'init':
-                # Initial message with form data and intent (optional)
-                session_data['intent_type'] = data.get('intent_type')
-                session_data['form_data'] = data.get('form_data', {})
+                # Handle JSON messages
+                if 'text' in message:
+                    data = json.loads(message['text'])
+                    message_type = data.get('type')
 
-                logger.info(f'Voice session initialized: intent={session_data["intent_type"]}, form_data={session_data["form_data"]}')
+                    if message_type == 'init':
+                        # Initial message - just acknowledge
+                        logger.info('Voice session initialized')
 
-                await websocket.send_json({
-                    'type': 'init_ack',
-                    'message': 'Session initialized, ready to receive audio',
-                })
-
-            elif message_type == 'audio_chunk':
-                # Receive audio chunk
-                audio_data = data.get('audio')
-
-                # Store audio chunk
-                session_data['audio_chunks'].append(audio_data)
-
-                # TODO: Process audio with Voice Service (Whisper)
-                # For now, just acknowledge
-                logger.debug(f'Received audio chunk: {len(audio_data) if audio_data else 0} bytes')
-
-                await websocket.send_json({
-                    'type': 'audio_ack',
-                    'message': 'Audio chunk received',
-                })
-
-            elif message_type == 'process_voice':
-                # Process all collected audio chunks
-                logger.info('Processing voice input...')
-
-                # Step 1: Voice Service - Speech to text (PLACEHOLDER)
-                # TODO: Implement voice_service.transcribe(audio_chunks)
-                transcribed_text = 'placeholder text'  # Placeholder
-
-                logger.info(f'Transcribed text: {transcribed_text}')
-
-                # Step 2: Intent Service - Extract intent and parameters
-                try:
-                    intent_result = await intent_service.extract_intent_and_params(
-                        text=transcribed_text,
-                        form_data=session_data['form_data'],
-                        hint_intent_type=session_data.get('intent_type'),
-                    )
-
-                    logger.info(f'Intent extracted: {intent_result}')
-
-                    # Send extracted params back to frontend for review
-                    await websocket.send_json({
-                        'type': 'intent_extracted',
-                        'intent_type': intent_result['intent_type'],
-                        'parameters': intent_result['parameters'],
-                        'confidence': intent_result.get('confidence', 0.0),
-                    })
-
-                except Exception as e:
-                    logger.error(f'Intent extraction error: {e}')
-                    await websocket.send_json({
-                        'type': 'error',
-                        'error': f'Failed to understand voice input: {str(e)}',
-                    })
-
-                # Clear audio chunks
-                session_data['audio_chunks'] = []
-
-            elif message_type == 'execute':
-                # Execute intent with parameters (from voice or form)
-                intent_type = data.get('intent_type')
-                parameters = data.get('parameters', {})
-
-                logger.info(f'Executing intent: {intent_type} with parameters: {parameters}')
-
-                # Step 3: Orchestration Service - Execute
-                result = await orchestration_service.execute_intent(
-                    intent_type=intent_type,
-                    parameters=parameters,
-                    user_id=int(user_id),
-                )
-
-                if result.success:
-                    # Check if needs confirmation
-                    needs_confirmation = data.get('needs_confirmation', False)
-
-                    if needs_confirmation:
                         await websocket.send_json({
-                            'type': 'confirmation_required',
-                            'data': result.data,
-                            'message': result.message or 'Please confirm',
+                            'type': 'init_ack',
+                            'message': 'Session initialized, ready to receive audio',
                         })
+
+                    elif message_type == 'stop_recording':
+                        # User stopped recording - merge and save audio
+                        logger.info(f'Stopping recording. Total chunks received: {len(session_data["audio_chunks"])}')
+
+                        if session_data['audio_chunks']:
+                            # Merge all audio chunks
+                            merged_audio = b''.join(session_data['audio_chunks'])
+
+                            # Create temp directory if not exists
+                            temp_dir = 'temp_audio'
+                            os.makedirs(temp_dir, exist_ok=True)
+
+                            # Generate filename with timestamp
+                            timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+                            filename = f'{temp_dir}/voice_{user_id}_{timestamp}.webm'
+
+                            # Save merged audio
+                            with open(filename, 'wb') as f:
+                                f.write(merged_audio)
+
+                            logger.info(f'✅ Audio saved: {filename}, size: {len(merged_audio)} bytes')
+
+                            await websocket.send_json({
+                                'type': 'recording_stopped',
+                                'message': f'Recording saved successfully ({len(merged_audio)} bytes)',
+                                'filename': filename,
+                                'chunks_count': len(session_data['audio_chunks']),
+                            })
+
+                            # Clear chunks after saving
+                            session_data['audio_chunks'] = []
+                        else:
+                            logger.warning('No audio chunks to save')
+                            await websocket.send_json({
+                                'type': 'error',
+                                'error': 'No audio data received',
+                            })
+
+                    elif message_type == 'ping':
+                        await websocket.send_json({'type': 'pong'})
+
                     else:
-                        await websocket.send_json({
-                            'type': 'execution_success',
-                            'data': result.data,
-                            'message': result.message or 'Success',
-                        })
+                        logger.warning(f'Unknown message type: {message_type}')
+
+                # Handle binary audio chunks
+                elif 'bytes' in message:
+                    audio_chunk = message['bytes']
+                    session_data['audio_chunks'].append(audio_chunk)
+
+                    chunk_size = len(audio_chunk)
+                    total_chunks = len(session_data['audio_chunks'])
+
+                    logger.debug(f'>>> Audio chunk received: {chunk_size} bytes (total chunks: {total_chunks})')
+
+                    # Send acknowledgment
+                    await websocket.send_json({
+                        'type': 'audio_chunk_ack',
+                        'chunk_number': total_chunks,
+                        'chunk_size': chunk_size,
+                    })
+
                 else:
-                    await websocket.send_json({
-                        'type': 'execution_error',
-                        'error': result.message,
-                        'error_type': result.data.get('error_type', 'UNKNOWN'),
-                        'data': result.data,
-                    })
+                    logger.warning(f'Unknown message format: {message}')
+                    # Check if it's a disconnect message
+                    if message.get('type') == 'websocket.disconnect':
+                        logger.info('Client disconnected')
+                        break
+                    continue
 
-            elif message_type == 'confirm':
-                # User confirmed action
-                intent_type = data.get('intent_type')
-                parameters = data.get('parameters', {})
-
-                logger.info(f'User confirmed execution: {intent_type}')
-
-                result = await orchestration_service.execute_intent(
-                    intent_type=intent_type,
-                    parameters=parameters,
-                    user_id=int(user_id),
-                )
-
-                if result.success:
-                    await websocket.send_json({
-                        'type': 'execution_success',
-                        'data': result.data,
-                        'message': result.message or 'Success',
-                    })
-                else:
-                    await websocket.send_json({
-                        'type': 'execution_error',
-                        'error': result.message,
-                        'error_type': result.data.get('error_type', 'UNKNOWN'),
-                    })
-
-            elif message_type == 'ping':
-                await websocket.send_json({'type': 'pong'})
-
-            else:
-                logger.warning(f'Unknown message type: {message_type}')
+            except json.JSONDecodeError as e:
+                logger.error(f'Failed to parse JSON: {e}')
+                await websocket.send_json({
+                    'type': 'error',
+                    'error': 'Invalid JSON format',
+                })
+                continue
+            except Exception as e:
+                logger.error(f'Error receiving message: {e}')
+                break
 
     except WebSocketDisconnect:
         if user_id:
