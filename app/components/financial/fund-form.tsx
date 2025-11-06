@@ -1,8 +1,9 @@
 "use client";
 
 import type React from "react";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useFinancial } from "@/lib/financial-context";
+import { VoiceFormSync } from "@/components/speech/voice-form-sync";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -44,6 +45,27 @@ export function FundForm({ onSuccess }: { onSuccess: () => void }) {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(false);
   const { addFund } = useFinancial();
+
+  // Handle voice parameters
+  const handleVoiceParameters = useCallback((params: Record<string, any>) => {
+    console.log("📝 Filling fund form with voice params:", params);
+
+    setFormData((prev) => ({
+      ...prev,
+      ...(params.fund_name && { fund_name: params.fund_name }),
+      ...(params.target_amount && { target_amount: String(params.target_amount) }),
+      ...(params.target_date && { target_date: params.target_date }),
+      ...(params.initial_amount && { initial_amount: String(params.initial_amount) }),
+      ...(params.monthly_contribution && { monthly_contribution: String(params.monthly_contribution) }),
+      ...(params.category && { category: params.category }),
+      ...(params.notes && { notes: params.notes }),
+    }));
+
+    // Mark filled fields as touched
+    if (params.fund_name) setTouched((prev) => ({ ...prev, fund_name: true }));
+    if (params.target_amount) setTouched((prev) => ({ ...prev, target_amount: true }));
+    if (params.target_date) setTouched((prev) => ({ ...prev, target_date: true }));
+  }, []);
 
   // Get minimum date (today) for date input
   const getMinDate = () => {
@@ -221,143 +243,154 @@ export function FundForm({ onSuccess }: { onSuccess: () => void }) {
   };
 
   return (
-    <div className="space-y-4">
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="fund_name">Tên quỹ *</Label>
-            <Input
-              id="fund_name"
-              placeholder="Ví dụ: Du lịch châu Âu"
-              value={formData.fund_name}
-              onChange={(e) => handleChange("fund_name", e.target.value)}
-              onBlur={() => handleBlur("fund_name")}
-              className={touched.fund_name && errors.fund_name ? "border-red-500 focus-visible:ring-red-500" : ""}
-            />
-            {touched.fund_name && errors.fund_name && <p className="text-sm text-red-500">{errors.fund_name}</p>}
+    <>
+      {/* Voice Form Sync */}
+      <VoiceFormSync
+        intentType="create_fund"
+        onParametersReceived={handleVoiceParameters}
+        getCurrentFormData={() => formData}
+      />
+
+      <div className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="fund_name">Tên quỹ *</Label>
+              <Input
+                id="fund_name"
+                placeholder="Ví dụ: Du lịch châu Âu"
+                value={formData.fund_name}
+                onChange={(e) => handleChange("fund_name", e.target.value)}
+                onBlur={() => handleBlur("fund_name")}
+                className={touched.fund_name && errors.fund_name ? "border-red-500 focus-visible:ring-red-500" : ""}
+              />
+              {touched.fund_name && errors.fund_name && <p className="text-sm text-red-500">{errors.fund_name}</p>}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="category">Danh mục</Label>
+              <Select
+                id="category"
+                value={formData.category}
+                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                {FUND_CATEGORIES.map((cat) => (
+                  <option key={cat.value} value={cat.value}>
+                    {cat.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="target_amount">Số tiền mục tiêu (VND) *</Label>
+              <Input
+                id="target_amount"
+                type="number"
+                placeholder="5000000"
+                step="1000"
+                min="100000"
+                value={formData.target_amount}
+                onChange={(e) => handleChange("target_amount", e.target.value)}
+                onBlur={() => handleBlur("target_amount")}
+                className={
+                  touched.target_amount && errors.target_amount ? "border-red-500 focus-visible:ring-red-500" : ""
+                }
+              />
+              {touched.target_amount && errors.target_amount && (
+                <p className="text-sm text-red-500">{errors.target_amount}</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="target_date">Ngày mục tiêu *</Label>
+              <DatePicker
+                id="target_date"
+                value={formData.target_date}
+                onChange={(value) => handleChange("target_date", value)}
+                onBlur={() => handleBlur("target_date")}
+                min={getMinDate()}
+                error={touched.target_date && !!errors.target_date}
+              />
+              {touched.target_date && errors.target_date && (
+                <p className="text-sm text-red-500">{errors.target_date}</p>
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="initial_amount">Số tiền ban đầu (VND)</Label>
+              <Input
+                id="initial_amount"
+                type="number"
+                placeholder="0"
+                step="1000"
+                min="0"
+                value={formData.initial_amount}
+                onChange={(e) => handleChange("initial_amount", e.target.value)}
+                onBlur={() => handleBlur("initial_amount")}
+                className={
+                  touched.initial_amount && errors.initial_amount ? "border-red-500 focus-visible:ring-red-500" : ""
+                }
+              />
+              {touched.initial_amount && errors.initial_amount ? (
+                <p className="text-sm text-red-500">{errors.initial_amount}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">Số tiền nạp ban đầu khi tạo quỹ</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="monthly_contribution">Đóng góp hàng tháng (VND)</Label>
+              <Input
+                id="monthly_contribution"
+                type="number"
+                placeholder="0"
+                step="1000"
+                min="0"
+                value={formData.monthly_contribution}
+                onChange={(e) => handleChange("monthly_contribution", e.target.value)}
+                onBlur={() => handleBlur("monthly_contribution")}
+                className={
+                  touched.monthly_contribution && errors.monthly_contribution
+                    ? "border-red-500 focus-visible:ring-red-500"
+                    : ""
+                }
+              />
+              {touched.monthly_contribution && errors.monthly_contribution ? (
+                <p className="text-sm text-red-500">{errors.monthly_contribution}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">Số tiền dự kiến đóng góp mỗi tháng</p>
+              )}
+            </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="category">Danh mục</Label>
-            <Select
-              id="category"
-              value={formData.category}
-              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
-              {FUND_CATEGORIES.map((cat) => (
-                <option key={cat.value} value={cat.value}>
-                  {cat.label}
-                </option>
-              ))}
-            </Select>
-          </div>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="target_amount">Số tiền mục tiêu (VND) *</Label>
-            <Input
-              id="target_amount"
-              type="number"
-              placeholder="5000000"
-              step="1000"
-              min="100000"
-              value={formData.target_amount}
-              onChange={(e) => handleChange("target_amount", e.target.value)}
-              onBlur={() => handleBlur("target_amount")}
-              className={
-                touched.target_amount && errors.target_amount ? "border-red-500 focus-visible:ring-red-500" : ""
-              }
-            />
-            {touched.target_amount && errors.target_amount && (
-              <p className="text-sm text-red-500">{errors.target_amount}</p>
-            )}
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="auto_transfer"
+                checked={formData.auto_transfer}
+                onChange={(e) => setFormData({ ...formData, auto_transfer: e.target.checked })}
+              />
+              <Label htmlFor="auto_transfer" className="text-sm font-normal cursor-pointer">
+                Tự động chuyển tiền hàng tháng
+              </Label>
+            </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="target_date">Ngày mục tiêu *</Label>
-            <DatePicker
-              id="target_date"
-              value={formData.target_date}
-              onChange={(value) => handleChange("target_date", value)}
-              onBlur={() => handleBlur("target_date")}
-              min={getMinDate()}
-              error={touched.target_date && !!errors.target_date}
+            <Label htmlFor="notes">Ghi chú</Label>
+            <Textarea
+              id="notes"
+              placeholder="Ghi chú về quỹ tiết kiệm..."
+              value={formData.notes}
+              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              rows={3}
             />
-            {touched.target_date && errors.target_date && <p className="text-sm text-red-500">{errors.target_date}</p>}
           </div>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="initial_amount">Số tiền ban đầu (VND)</Label>
-            <Input
-              id="initial_amount"
-              type="number"
-              placeholder="0"
-              step="1000"
-              min="0"
-              value={formData.initial_amount}
-              onChange={(e) => handleChange("initial_amount", e.target.value)}
-              onBlur={() => handleBlur("initial_amount")}
-              className={
-                touched.initial_amount && errors.initial_amount ? "border-red-500 focus-visible:ring-red-500" : ""
-              }
-            />
-            {touched.initial_amount && errors.initial_amount ? (
-              <p className="text-sm text-red-500">{errors.initial_amount}</p>
-            ) : (
-              <p className="text-xs text-muted-foreground">Số tiền nạp ban đầu khi tạo quỹ</p>
-            )}
+          <div className="rounded-b-xl sm:rounded-b-2xl sticky bottom-0 left-0 right-0 bg-background border-t pt-4 -mx-4 sm:-mx-6 px-4 sm:px-6 pb-4 shadow-lg z-10">
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? "Đang tạo..." : "Tạo quỹ tiết kiệm"}
+            </Button>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="monthly_contribution">Đóng góp hàng tháng (VND)</Label>
-            <Input
-              id="monthly_contribution"
-              type="number"
-              placeholder="0"
-              step="1000"
-              min="0"
-              value={formData.monthly_contribution}
-              onChange={(e) => handleChange("monthly_contribution", e.target.value)}
-              onBlur={() => handleBlur("monthly_contribution")}
-              className={
-                touched.monthly_contribution && errors.monthly_contribution
-                  ? "border-red-500 focus-visible:ring-red-500"
-                  : ""
-              }
-            />
-            {touched.monthly_contribution && errors.monthly_contribution ? (
-              <p className="text-sm text-red-500">{errors.monthly_contribution}</p>
-            ) : (
-              <p className="text-xs text-muted-foreground">Số tiền dự kiến đóng góp mỗi tháng</p>
-            )}
-          </div>
-        </div>
-        <div className="space-y-2">
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="auto_transfer"
-              checked={formData.auto_transfer}
-              onChange={(e) => setFormData({ ...formData, auto_transfer: e.target.checked })}
-            />
-            <Label htmlFor="auto_transfer" className="text-sm font-normal cursor-pointer">
-              Tự động chuyển tiền hàng tháng
-            </Label>
-          </div>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="notes">Ghi chú</Label>
-          <Textarea
-            id="notes"
-            placeholder="Ghi chú về quỹ tiết kiệm..."
-            value={formData.notes}
-            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-            rows={3}
-          />
-        </div>
-        <div className="rounded-b-xl sm:rounded-b-2xl sticky bottom-0 left-0 right-0 bg-background border-t pt-4 -mx-4 sm:-mx-6 px-4 sm:px-6 pb-4 shadow-lg z-10">
-          <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading ? "Đang tạo..." : "Tạo quỹ tiết kiệm"}
-          </Button>
-        </div>
-      </form>
-    </div>
+        </form>
+      </div>
+    </>
   );
 }

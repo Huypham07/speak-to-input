@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowDownIcon, ArrowUpIcon, ArrowRightIcon } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { fetchWithAuth } from "@/lib/fetch-auth";
 
 interface Transaction {
   id: number;
@@ -43,7 +44,7 @@ export default function TransactionHistory({ accountId }: TransactionHistoryProp
       setLoading(true);
       setError(null);
 
-      const response = await fetch("/api/accounts/transactions");
+      const response = await fetchWithAuth("/api/accounts/transactions");
       if (!response.ok) {
         throw new Error("Không thể tải lịch sử giao dịch");
       }

@@ -30,7 +30,7 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     """Data stored in JWT token"""
     username: Optional[str] = None
-    user_id: Optional[str] = None
+    user_id: Optional[int] = None  # Changed from str to int
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:

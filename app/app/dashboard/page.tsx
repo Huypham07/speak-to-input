@@ -10,9 +10,7 @@ import { StatisticsOverview } from "@/components/dashboard/statistics-overview";
 import { TransfersList } from "@/components/dashboard/transfers-list";
 import { BillsList } from "@/components/dashboard/bills-list";
 import { FundsList } from "@/components/dashboard/funds-list";
-import { SpeechResultModal } from "@/components/speech/speech-result-modal";
 import { useSpeech } from "@/lib/speech-context";
-import { useFinancial } from "@/lib/financial-context";
 import { Settings, User, LogOut } from "lucide-react";
 import {
   DropdownMenu,
@@ -27,49 +25,20 @@ export default function DashboardPage() {
   const { user, isLoading, logout } = useAuth();
   const { isCollapsed } = useSidebar();
   const router = useRouter();
-  const { transcript } = useSpeech();
-  const { addTransfer, addBill, addFund } = useFinancial();
+  const { extractedIntent } = useSpeech();
+
+  // Navigate to accounts page with transfer tab when voice intent is received
+  useEffect(() => {
+    if (extractedIntent && extractedIntent.intent_type === "create_transfer" && !extractedIntent.intent_changed) {
+      router.push("/accounts?action=transfer");
+    }
+  }, [extractedIntent, router]);
 
   useEffect(() => {
     if (!isLoading && !user) {
       router.push("/login");
     }
   }, [user, isLoading, router]);
-
-  const handleCommandMatched = (commandId: string, data: Record<string, any>) => {
-    switch (commandId) {
-      case "transfer":
-        addTransfer({
-          recipientName: data.recipientName,
-          recipientAccount: data.recipientAccount,
-          amount: data.amount,
-          description: data.description || "",
-        });
-        break;
-      case "bill":
-        addBill({
-          bill_name: data.bill_name,
-          category: data.category,
-          amount: data.amount,
-          dueDate: data.dueDate,
-          notes: data.notes || "",
-          status: "pending",
-          tags: [],
-        });
-        break;
-      case "fund":
-        addFund({
-          fund_name: data.name || data.fund_name || "",
-          target_amount: data.targetAmount || data.target_amount || 0,
-          target_date: data.deadline || data.target_date || new Date().toISOString().split("T")[0],
-          initial_amount: data.currentAmount || data.initial_amount || 0,
-          monthly_contribution: data.monthly_contribution || 0,
-          category: data.category || "other",
-          notes: data.description || data.notes || "",
-        });
-        break;
-    }
-  };
 
   if (!user) return null;
 
@@ -131,7 +100,6 @@ export default function DashboardPage() {
           <FundsList />
         </div>
       </main>
-      {transcript && <SpeechResultModal onCommandMatched={handleCommandMatched} onClose={() => {}} />}
     </div>
   );
 }

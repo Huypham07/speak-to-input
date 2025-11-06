@@ -162,10 +162,11 @@ cython_debug/
 .vscode
 
 master_data
-/test
-/data
 src/cv_extractor/tests/test_ignore
 
 *.ipynb
 /.idea
-test.py
+
+
+# use for this project
+temp_audio/

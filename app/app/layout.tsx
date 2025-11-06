@@ -6,6 +6,7 @@ import { AuthProvider } from "@/lib/auth-context";
 import { FinancialProvider } from "@/lib/financial-context";
 import { SpeechProvider } from "@/lib/speech-context";
 import { SidebarProvider } from "@/lib/sidebar-context";
+import { FormProvider } from "@/lib/form-context";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
@@ -51,7 +52,9 @@ export default function RootLayout({
         <AuthProvider>
           <SidebarProvider>
             <FinancialProvider>
-              <SpeechProvider>{children}</SpeechProvider>
+              <FormProvider>
+                <SpeechProvider>{children}</SpeechProvider>
+              </FormProvider>
             </FinancialProvider>
           </SidebarProvider>
         </AuthProvider>
