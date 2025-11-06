@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Send, Users, ChevronDown } from "lucide-react";
+import { Send } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface TransferFormProps {
@@ -15,55 +16,26 @@ interface TransferFormProps {
   onSuccess?: () => void;
 }
 
-interface OtherUserAccount {
-  id: number;
-  account_number: string;
-  account_name: string;
-  balance: number;
-  currency: string;
-  account_type: string;
-  is_active: boolean;
-  user_id: number;
-  user_full_name: string;
-  user_username: string;
-}
-
 export function TransferForm({ accountId, currentBalance, onSuccess }: TransferFormProps) {
+  const searchParams = useSearchParams();
   const [recipientAccountNumber, setRecipientAccountNumber] = useState("");
   const [recipientName, setRecipientName] = useState("");
   const [amount, setAmount] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
-  const [otherAccounts, setOtherAccounts] = useState<OtherUserAccount[]>([]);
-  const [loadingAccounts, setLoadingAccounts] = useState(false);
-  const [showAccountList, setShowAccountList] = useState(false);
   const { toast } = useToast();
 
-  // Fetch other users' accounts
+  // Read URL params and auto-fill form
   useEffect(() => {
-    const fetchOtherAccounts = async () => {
-      setLoadingAccounts(true);
-      try {
-        const response = await fetch("/api/accounts/others");
-        if (response.ok) {
-          const data = await response.json();
-          setOtherAccounts(data);
-        }
-      } catch (error) {
-        console.error("Error fetching other users accounts:", error);
-      } finally {
-        setLoadingAccounts(false);
-      }
-    };
-
-    fetchOtherAccounts();
-  }, []);
-
-  const handleSelectAccount = (account: OtherUserAccount) => {
-    setRecipientAccountNumber(account.account_number);
-    setRecipientName(account.user_full_name);
-    setShowAccountList(false);
-  };
+    const accountNumber = searchParams.get("accountNumber");
+    const recipientNameParam = searchParams.get("recipientName");
+    if (accountNumber) {
+      setRecipientAccountNumber(accountNumber);
+    }
+    if (recipientNameParam) {
+      setRecipientName(recipientNameParam);
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -154,56 +126,6 @@ export function TransferForm({ accountId, currentBalance, onSuccess }: TransferF
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Other Users Accounts List */}
-          {otherAccounts.length > 0 && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="flex items-center gap-2">
-                  <Users className="h-4 w-4" />
-                  Danh sách tài khoản người dùng khác
-                </Label>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowAccountList(!showAccountList)}
-                  className="h-8">
-                  {showAccountList ? "Ẩn" : "Hiện"}
-                  <ChevronDown className={`h-4 w-4 ml-1 transition-transform ${showAccountList ? "rotate-180" : ""}`} />
-                </Button>
-              </div>
-              {showAccountList && (
-                <div className="border rounded-lg p-3 max-h-60 overflow-y-auto space-y-2 bg-muted/50">
-                  {loadingAccounts ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">Đang tải...</p>
-                  ) : (
-                    otherAccounts.map((account) => (
-                      <button
-                        key={account.id}
-                        type="button"
-                        onClick={() => handleSelectAccount(account)}
-                        className="w-full text-left p-3 rounded-md border bg-background hover:bg-accent hover:border-primary transition-colors">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <p className="font-medium text-sm">{account.user_full_name}</p>
-                            <p className="text-xs text-muted-foreground">@{account.user_username}</p>
-                            <p className="text-xs text-muted-foreground mt-1">{account.account_name}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-sm font-mono">{account.account_number}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {account.balance.toLocaleString("vi-VN")} {account.currency}
-                            </p>
-                          </div>
-                        </div>
-                      </button>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
           {/* Recipient Account Number */}
           <div className="space-y-2">
             <Label htmlFor="recipientAccountNumber">Số tài khoản người nhận *</Label>
