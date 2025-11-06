@@ -7,6 +7,7 @@ import { fetchWithAuth } from "@/lib/fetch-auth";
 
 export interface Transfer {
   id: number;
+  fromAccountId: number; // Add this to identify user's outgoing transfers
   recipientName: string;
   recipientAccount: string;
   amount: number;
@@ -61,6 +62,7 @@ interface FinancialContextType {
   updateFund: (id: number, fund: Partial<SavingsFund>) => Promise<void>;
   refreshFunds: () => Promise<void>;
   refreshBills: () => Promise<void>;
+  refreshTransfers: () => Promise<void>;
   depositToFund: (fundId: number, amount: number, fromAccountId?: number) => Promise<void>;
   withdrawFromFund: (fundId: number, amount: number, toAccountId?: number) => Promise<void>;
   deleteFund: (fundId: number) => Promise<void>;
@@ -74,6 +76,42 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
   const [bills, setBills] = useState<ExpenseBill[]>([]);
   const [funds, setFunds] = useState<SavingsFund[]>([]);
   const [isLoadingFunds, setIsLoadingFunds] = useState(false);
+
+  // Fetch transfers from API
+  const fetchTransfers = useCallback(async () => {
+    if (!user) {
+      setTransfers([]);
+      return;
+    }
+
+    try {
+      console.log("🔄 Fetching transfers...");
+      const response = await fetchWithAuth("/api/transfers");
+      if (response.ok) {
+        const data = await response.json();
+        console.log("✅ Transfers API response:", data);
+        // Transform API response to match Transfer interface
+        const transformedTransfers: Transfer[] = data.map((transfer: any) => ({
+          id: transfer.id,
+          fromAccountId: transfer.from_account_id,
+          recipientName: transfer.to_account_number, // API uses to_account_number
+          recipientAccount: transfer.to_account_number,
+          amount: transfer.amount,
+          description: transfer.message || "",
+          date: new Date(transfer.created_at),
+          status: transfer.status,
+        }));
+        console.log("✅ Transformed transfers:", transformedTransfers);
+        setTransfers(transformedTransfers);
+      } else if (response.status === 401) {
+        console.warn("⚠️ Unauthorized - clearing transfers");
+        setTransfers([]);
+      }
+    } catch (error) {
+      console.error("❌ Error fetching transfers:", error);
+      setTransfers([]);
+    }
+  }, [user]);
 
   // Fetch bills from API
   const fetchBills = useCallback(async () => {
@@ -139,14 +177,16 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Only fetch if auth check is complete and user is logged in
     if (!isAuthLoading && user) {
+      fetchTransfers();
       fetchFunds();
       fetchBills();
     } else if (!isAuthLoading && !user) {
-      // Clear funds and bills when user logs out
+      // Clear data when user logs out
+      setTransfers([]);
       setFunds([]);
       setBills([]);
     }
-  }, [user, isAuthLoading, fetchFunds, fetchBills]);
+  }, [user, isAuthLoading, fetchTransfers, fetchFunds, fetchBills]);
 
   const addTransfer = useCallback((transfer: Omit<Transfer, "id" | "date" | "status">) => {
     const newTransfer: Transfer = {
@@ -359,6 +399,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
         updateFund,
         refreshFunds: fetchFunds,
         refreshBills: fetchBills,
+        refreshTransfers: fetchTransfers,
         depositToFund,
         withdrawFromFund,
         deleteFund,

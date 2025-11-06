@@ -9,12 +9,31 @@ import { FundsList } from "@/components/dashboard/funds-list";
 import { FundForm } from "@/components/financial/fund-form";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ChevronLeft } from "lucide-react";
+import { useSpeech } from "@/lib/speech-context";
 
 export default function FundsPage() {
   const { user, isLoading } = useAuth();
   const { isCollapsed } = useSidebar();
   const router = useRouter();
   const [isCreating, setIsCreating] = useState(false);
+  const { extractedIntent } = useSpeech();
+
+  // Auto-open dialog ONLY when voice intent has sufficient parameters
+  useEffect(() => {
+    if (!extractedIntent || extractedIntent.intent_changed) return;
+
+    const { intent_type, parameters } = extractedIntent;
+
+    // CREATE_FUND: Auto-open if has basic info (fund_name or target_amount)
+    if (intent_type === "create_fund" && (parameters.fund_name || parameters.target_amount)) {
+      setIsCreating(true);
+    }
+
+    // DEPOSIT_FUND / WITHDRAW_FUND: Auto-open ONLY if has fund_id
+    if ((intent_type === "deposit_fund" || intent_type === "withdraw_fund") && parameters.fund_id) {
+      setIsCreating(true);
+    }
+  }, [extractedIntent]);
 
   // Redirect to login if not authenticated
   useEffect(() => {

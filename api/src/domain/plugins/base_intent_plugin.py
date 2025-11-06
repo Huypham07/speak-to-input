@@ -37,6 +37,14 @@ class IntentPlugin(ABC):
         """Description of what this intent does"""
         return ''
 
+    @property
+    def requires_voice_confirmation(self) -> bool:
+        """
+        Whether this intent requires user confirmation when triggered by voice.
+        Default is True for safety. Override to False for read-only intents.
+        """
+        return True
+
     # ========== Parameter Schema ==========
 
     @abstractmethod

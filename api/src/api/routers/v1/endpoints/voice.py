@@ -71,9 +71,10 @@ async def voice_stream(
 
         # Session state
         session_data: Dict[str, Any] = {
-            'intent_type': None,
-            'form_data': {},
+            'hint_intent_type': None,  # Intent type from current screen
+            'form_data': {},  # Existing form data from screen
             'audio_chunks': [],
+            'is_recording': False,
         }
 
         while True:
@@ -87,8 +88,17 @@ async def voice_stream(
                     message_type = data.get('type')
 
                     if message_type == 'init':
-                        # Initial message - just acknowledge
+                        # Initial message with optional form context
+                        hint_intent_type = data.get('intent_type')
+                        form_data = data.get('form_data', {})
+
+                        session_data['hint_intent_type'] = hint_intent_type
+                        session_data['form_data'] = form_data
+                        session_data['is_recording'] = True
+
                         logger.info('Voice session initialized')
+                        logger.info(f'  Hint intent: {hint_intent_type}')
+                        logger.info(f'  Form data: {form_data}')
 
                         await websocket.send_json({
                             'type': 'init_ack',
@@ -96,42 +106,137 @@ async def voice_stream(
                         })
 
                     elif message_type == 'stop_recording':
-                        # User stopped recording - merge and save audio
-                        logger.info(f'Stopping recording. Total chunks received: {len(session_data["audio_chunks"])}')
+                        # User clicked ✓ (Stop & Save) - process the recording
+                        logger.info(f'Processing recording. Total chunks: {len(session_data["audio_chunks"])}')
 
-                        if session_data['audio_chunks']:
-                            # Merge all audio chunks
-                            merged_audio = b''.join(session_data['audio_chunks'])
+                        session_data['is_recording'] = False
 
-                            # Create temp directory if not exists
-                            temp_dir = 'temp_audio'
-                            os.makedirs(temp_dir, exist_ok=True)
-
-                            # Generate filename with timestamp
-                            timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-                            filename = f'{temp_dir}/voice_{user_id}_{timestamp}.webm'
-
-                            # Save merged audio
-                            with open(filename, 'wb') as f:
-                                f.write(merged_audio)
-
-                            logger.info(f'✅ Audio saved: {filename}, size: {len(merged_audio)} bytes')
-
-                            await websocket.send_json({
-                                'type': 'recording_stopped',
-                                'message': f'Recording saved successfully ({len(merged_audio)} bytes)',
-                                'filename': filename,
-                                'chunks_count': len(session_data['audio_chunks']),
-                            })
-
-                            # Clear chunks after saving
-                            session_data['audio_chunks'] = []
-                        else:
-                            logger.warning('No audio chunks to save')
+                        if not session_data['audio_chunks']:
+                            logger.warning('No audio chunks to process')
                             await websocket.send_json({
                                 'type': 'error',
                                 'error': 'No audio data received',
                             })
+                            continue
+
+                        try:
+                            # Step 1: Merge audio chunks
+                            merged_audio = b''.join(session_data['audio_chunks'])
+                            logger.info(f'✅ Merged audio: {len(merged_audio)} bytes from {len(session_data["audio_chunks"])} chunks')
+
+                            # Step 2: Speech-to-Text + Normalization
+                            logger.info('🎤 Starting STT...')
+                            asr_text, normalized_text = await voice_service.process(merged_audio)
+
+                            logger.info(f'📝 ASR result: "{asr_text}"')
+                            logger.info(f'🔧 Normalized: "{normalized_text}"')
+
+                            if not normalized_text or not normalized_text.strip():
+                                await websocket.send_json({
+                                    'type': 'error',
+                                    'error': 'Could not transcribe audio. Please try again.',
+                                })
+                                continue
+
+                            # Step 3: Intent Understanding
+                            logger.info('🧠 Extracting intent...')
+                            intent_result = await intent_service.extract_intent_and_params(
+                                text=normalized_text,
+                                form_data=session_data['form_data'],
+                                hint_intent_type=session_data['hint_intent_type'],
+                            )
+
+                            intent_type = intent_result['intent_type']
+                            parameters = intent_result['parameters']
+
+                            logger.info(f'✨ Intent: {intent_type}')
+                            logger.info(f'📋 Parameters: {parameters}')
+
+                            # Step 4: Check if intent changed
+                            intent_changed = (
+                                session_data['hint_intent_type'] is not None
+                                and intent_type != session_data['hint_intent_type']
+                            )
+
+                            # Step 5: Get plugin to check if needs confirmation
+                            from domain.plugins.registry import get_plugin_registry
+                            plugin_registry = get_plugin_registry()
+                            plugin = plugin_registry.get_plugin(intent_type)
+
+                            needs_confirmation = True  # Default to True for safety
+                            if plugin:
+                                # Check if plugin requires confirmation for voice input
+                                needs_confirmation = plugin.requires_voice_confirmation
+
+                            logger.info(f'🔍 Plugin check: {intent_type}, needs_confirmation={needs_confirmation}')
+
+                            # Step 6: Prepare response
+                            response_data = {
+                                'type': 'intent_extracted',
+                                'asr_text': asr_text,
+                                'normalized_text': normalized_text,
+                                'intent_type': intent_type,
+                                'parameters': parameters,
+                                'intent_changed': intent_changed,
+                                'needs_confirmation': needs_confirmation,
+                            }
+
+                            logger.info(f'📤 Sending response: intent_changed={intent_changed}, needs_confirmation={needs_confirmation}')
+                            await websocket.send_json(response_data)
+
+                            # Clear audio chunks
+                            session_data['audio_chunks'] = []
+
+                        except Exception as e:
+                            logger.error(f'Error processing recording: {e}', exc_info=True)
+                            await websocket.send_json({
+                                'type': 'error',
+                                'error': f'Failed to process recording: {str(e)}',
+                            })
+
+                    elif message_type == 'confirm_execute':
+                        # User confirmed the intent execution
+                        intent_type = data.get('intent_type')
+                        parameters = data.get('parameters', {})
+
+                        logger.info(f'🚀 Executing confirmed intent: {intent_type}')
+                        logger.info(f'   Parameters: {parameters}')
+
+                        try:
+                            # Execute via orchestration service
+                            result = await orchestration_service.execute_intent(
+                                user_id=int(user_id),
+                                intent_type=intent_type,
+                                parameters=parameters,
+                            )
+
+                            # Send success response
+                            await websocket.send_json({
+                                'type': 'execution_success',
+                                'success': result.success,
+                                'message': result.message,
+                                'data': result.data,
+                            })
+
+                            logger.info(f'✅ Execution completed: {result.message}')
+
+                        except Exception as e:
+                            logger.error(f'Error executing intent: {e}', exc_info=True)
+                            await websocket.send_json({
+                                'type': 'execution_error',
+                                'error': str(e),
+                            })
+
+                    elif message_type == 'cancel':
+                        # User clicked ✕ (Cancel) - discard everything
+                        logger.info('❌ User cancelled voice input')
+                        session_data['audio_chunks'] = []
+                        session_data['is_recording'] = False
+
+                        await websocket.send_json({
+                            'type': 'cancelled',
+                            'message': 'Voice input cancelled',
+                        })
 
                     elif message_type == 'ping':
                         await websocket.send_json({'type': 'pong'})

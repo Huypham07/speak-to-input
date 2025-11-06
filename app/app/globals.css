@@ -178,7 +178,7 @@
 [data-sonner-toast][data-type="success"] {
   background: rgb(236, 253, 245) !important;
   color: rgb(6, 95, 70) !important;
-  border-color: rgb(141, 241, 194) !important;
+  border-color: rgb(173, 250, 214) !important;
 }
 
 .dark [data-sonner-toast][data-type="success"] {

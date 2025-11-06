@@ -2,7 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 interface VoiceWebSocketOptions {
   onTranscriptReceived?: (text: string) => void;
-  onIntentExtracted?: (data: { intent_type: string; parameters: any; confidence: number }) => void;
+  onIntentExtracted?: (data: {
+    asr_text: string;
+    normalized_text: string;
+    intent_type: string;
+    parameters: any;
+    intent_changed: boolean;
+    needs_confirmation: boolean;
+  }) => void;
   onExecutionSuccess?: (data: { data: any; message: string }) => void;
   onExecutionError?: (error: string) => void;
   onError?: (error: string) => void;
@@ -14,8 +21,8 @@ interface UseVoiceWebSocketResult {
   sendAudioChunk: (audioData: ArrayBuffer) => void;
   processVoice: () => void;
   stopRecording: () => boolean;
-  executeIntent: (intentType: string, parameters: any, needsConfirmation?: boolean) => void;
   confirmExecution: (intentType: string, parameters: any) => void;
+  cancelRecording: () => void;
   isConnected: boolean;
   isReady: boolean;
   error: string | null;
@@ -207,26 +214,25 @@ export function useVoiceWebSocket(options: VoiceWebSocketOptions = {}): UseVoice
     return false;
   }, []);
 
-  const executeIntent = useCallback((intentType: string, parameters: any, needsConfirmation: boolean = false) => {
+  const confirmExecution = useCallback((intentType: string, parameters: any) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      console.log("📨 Sending confirm_execute message");
       wsRef.current.send(
         JSON.stringify({
-          type: "execute",
+          type: "confirm_execute",
           intent_type: intentType,
           parameters,
-          needs_confirmation: needsConfirmation,
         })
       );
     }
   }, []);
 
-  const confirmExecution = useCallback((intentType: string, parameters: any) => {
+  const cancelRecording = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      console.log("📨 Sending cancel message");
       wsRef.current.send(
         JSON.stringify({
-          type: "confirm",
-          intent_type: intentType,
-          parameters,
+          type: "cancel",
         })
       );
     }
@@ -261,8 +267,8 @@ export function useVoiceWebSocket(options: VoiceWebSocketOptions = {}): UseVoice
     sendAudioChunk,
     processVoice,
     stopRecording,
-    executeIntent,
     confirmExecution,
+    cancelRecording,
     isConnected,
     isReady,
     error,

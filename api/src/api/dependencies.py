@@ -14,6 +14,7 @@ from infra.db.repositories import SavingsFundRepository
 from infra.db.repositories import TransactionRepository
 from infra.db.repositories import UserRepository
 from infra.infra_manager import InfrastructureManager
+from infra.llm.llm_service import LLMService
 from shared.settings import Settings
 
 
@@ -128,38 +129,58 @@ def get_fund_repository_ws(
 
 # ========== Service Dependencies ==========
 
+def get_llm_service(
+    settings: Settings = Depends(get_settings),
+) -> LLMService:
+    """Create LLM Service instance"""
+    return LLMService(settings)
+
+
+def get_llm_service_ws(
+    settings: Settings = Depends(get_settings_ws),
+) -> LLMService:
+    """Create LLM Service instance for WebSocket"""
+    return LLMService(settings)
+
+
 def get_voice_service(
     settings: Settings = Depends(get_settings),
+    llm_service: LLMService = Depends(get_llm_service),
 ) -> VoiceService:
-    """Create VoiceService instance"""
-    return VoiceService(settings)
+    """Create VoiceService instance with LLM dependency"""
+    return VoiceService(settings, llm_service)
 
 
 def get_voice_service_ws(
     settings: Settings = Depends(get_settings_ws),
+    llm_service: LLMService = Depends(get_llm_service_ws),
 ) -> VoiceService:
-    """Create VoiceService instance for WebSocket"""
-    return VoiceService(settings)
+    """Create VoiceService instance for WebSocket with LLM dependency"""
+    return VoiceService(settings, llm_service)
 
 
 def get_intent_service(
     settings: Settings = Depends(get_settings),
+    llm_service: LLMService = Depends(get_llm_service),
 ) -> IntentUnderstandingService:
     """Create Intent Understanding Service with plugin registry"""
     plugin_registry = get_plugin_registry()
     return IntentUnderstandingService(
         settings=settings,
+        llm_service=llm_service,
         plugin_registry=plugin_registry,
     )
 
 
 def get_intent_service_ws(
     settings: Settings = Depends(get_settings_ws),
+    llm_service: LLMService = Depends(get_llm_service_ws),
 ) -> IntentUnderstandingService:
     """Create Intent Understanding Service with plugin registry for WebSocket"""
     plugin_registry = get_plugin_registry()
     return IntentUnderstandingService(
         settings=settings,
+        llm_service=llm_service,
         plugin_registry=plugin_registry,
     )
 

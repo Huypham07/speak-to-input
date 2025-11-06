@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 from typing import Dict
+from typing import Optional
 
 from domain.plugins.registry import IntentPluginRegistry
 from domain.value_objects.intent_type import IntentType
@@ -64,21 +65,21 @@ class IntentUnderstandingService:
 
                 # Format: "field_name (type) - description [required/optional]"
                 requirement = 'required' if is_required else 'optional'
-                param_descriptions.append(f"{param_name} ({param_type}, {requirement}): {param_desc}")
+                param_descriptions.append(f'{param_name} ({param_type}, {requirement}): {param_desc}')
 
             params_str = '\n   '.join(param_descriptions) if param_descriptions else 'không có parameters'
 
             # Add to prompt
             prompt_parts.append(
-                f"\n{idx}. {plugin.intent_type} - {plugin.display_name}",
+                f'\n{idx}. {plugin.intent_type} - {plugin.display_name}',
             )
             if plugin.description:
-                prompt_parts.append(f"   Mô tả: {plugin.description}")
-            prompt_parts.append(f"   Parameters:\n   {params_str}")
+                prompt_parts.append(f'   Mô tả: {plugin.description}')
+            prompt_parts.append(f'   Parameters:\n   {params_str}')
 
         # Add UNKNOWN intent
         num_intents = len(plugins) + 1
-        prompt_parts.append(f"\n{num_intents}. UNKNOWN - Không xác định được (dùng khi không match intent nào)")
+        prompt_parts.append(f'\n{num_intents}. UNKNOWN - Không xác định được (dùng khi không match intent nào)')
 
         # Add general notes
         prompt_parts.append('\n\nCHÚ Ý:')
@@ -90,13 +91,13 @@ class IntentUnderstandingService:
         self.system_prompt = '\n'.join(prompt_parts)
 
         # Log the generated prompt for debugging
-        logger.debug(f"Generated system prompt:\n{self.system_prompt}")
+        logger.debug(f'Generated system prompt:\n{self.system_prompt}')
 
     async def extract_intent_and_params(
         self,
         text: str,
-        form_data: Dict[str, Any] = None,
-        hint_intent_type: str = None,
+        form_data: Optional[Dict[str, Any]] = None,
+        hint_intent_type: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Extract intent and parameters from text with optional form data and hint.
@@ -131,7 +132,7 @@ class IntentUnderstandingService:
 
         # Case 2: Hint intent type provided - build context with hint and form_data
         form_data = form_data or {}
-        
+
         # Get plugin for hint intent to know schema and determine missing fields
         plugin = self.plugin_registry.get_plugin(hint_intent_type)
         if not plugin:
@@ -174,7 +175,7 @@ class IntentUnderstandingService:
         # Same intent - merge form_data with extracted parameters
         # Merge form_data (existing) with parameters (newly extracted missing fields)
         merged_parameters = {**form_data, **parameters}
-        
+
         logger.info(f'Extracted missing params for {hint_intent_type}, merged with existing data')
         logger.info(f'Existing: {form_data}, New: {parameters}, Merged: {merged_parameters}')
 
@@ -202,7 +203,7 @@ class IntentUnderstandingService:
         # Build user message with context
         user_message = f"Phân tích lệnh: \"{text}\""
         if context:
-            user_message += f"\n\nContext: {json.dumps(context, ensure_ascii=False)}"
+            user_message += f'\n\nContext: {json.dumps(context, ensure_ascii=False)}'
 
         messages = [
             {'role': 'system', 'content': system_prompt},
@@ -242,7 +243,7 @@ class IntentUnderstandingService:
     def _build_classify_prompt(self, context: Dict[str, Any]) -> str:
         """
         Build system prompt for classification based on context.
-        
+
         If hint_intent_type is provided:
         - Check if user wants to change intent
         - If same intent: extract only missing params
@@ -261,7 +262,7 @@ class IntentUnderstandingService:
             prompt_parts.append('\n\n=== TÌNH HUỐNG ĐẶC BIỆT ===')
             prompt_parts.append(f'Intent hiện tại đang được xử lý: {hint_intent_type}')
             prompt_parts.append(f'Dữ liệu đã có: {json.dumps(form_data, ensure_ascii=False)}')
-            
+
             if missing_fields:
                 # Build missing fields description
                 properties = schema.get('properties', {}) if schema else {}
@@ -271,13 +272,13 @@ class IntentUnderstandingService:
                         field_info = properties[field]
                         field_desc = field_info.get('description', field)
                         field_type = field_info.get('type', 'any')
-                        missing_desc.append(f"- {field} ({field_type}): {field_desc}")
+                        missing_desc.append(f'- {field} ({field_type}): {field_desc}')
                     else:
-                        missing_desc.append(f"- {field}")
-                
-                prompt_parts.append(f'\nCác field còn thiếu cần extract:')
+                        missing_desc.append(f'- {field}')
+
+                prompt_parts.append('\nCác field còn thiếu cần extract:')
                 prompt_parts.extend(missing_desc)
-                
+
                 prompt_parts.append('\nNHIỆM VỤ:')
                 prompt_parts.append('1. Phân tích xem người dùng có đang muốn CHUYỂN SANG INTENT MỚI không:')
                 prompt_parts.append('   - Nếu có: Trả về intent mới và TẤT CẢ parameters của intent mới')
@@ -299,4 +300,3 @@ class IntentUnderstandingService:
                 prompt_parts.append('3. Nếu user muốn sửa, trả về các field được sửa với giá trị mới')
 
         return '\n'.join(prompt_parts)
-
