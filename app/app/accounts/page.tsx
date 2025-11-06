@@ -126,6 +126,7 @@ function AccountsPageContent() {
   const handleSuccess = () => {
     // Refresh accounts and transaction history after successful transaction
     fetchAccounts();
+    fetchOtherAccounts(); // Reload other users' accounts to update balances
     setTransactionKey((prev) => prev + 1); // Force TransactionHistory to re-fetch
   };
 
@@ -304,11 +305,13 @@ function AccountsPageContent() {
                   </TabsContent>
 
                   <TabsContent value="transfer">
-                    <TransferForm
-                      accountId={selectedAccount.id}
-                      currentBalance={selectedAccount.balance}
-                      onSuccess={handleSuccess}
-                    />
+                    <Suspense fallback={<Skeleton className="h-96 w-full" />}>
+                      <TransferForm
+                        accountId={selectedAccount.id}
+                        currentBalance={selectedAccount.balance}
+                        onSuccess={handleSuccess}
+                      />
+                    </Suspense>
                   </TabsContent>
                 </Tabs>
               ) : (
