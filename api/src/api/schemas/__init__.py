@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .account_schema import AccountResponse
 from .account_schema import DepositRequest
+from .account_schema import OtherUserAccountResponse
 from .account_schema import TransactionResponse
 from .account_schema import WithdrawRequest
 from .auth_schema import LoginRequest
@@ -40,6 +41,7 @@ __all__ = [
     'DepositRequest',
     'WithdrawRequest',
     'TransactionResponse',
+    'OtherUserAccountResponse',
     # Financial
     'TransferRequest',
     'TransferResponse',

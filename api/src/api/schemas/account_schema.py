@@ -17,6 +17,20 @@ class AccountResponse(BaseModel):
     is_active: bool
 
 
+class OtherUserAccountResponse(BaseModel):
+    """Account response schema with user info for other users' accounts"""
+    id: int
+    account_number: str
+    account_name: str
+    balance: float
+    currency: str
+    account_type: str
+    is_active: bool
+    user_id: int
+    user_full_name: str
+    user_username: str
+
+
 class DepositRequest(BaseModel):
     """Request to deposit money to account"""
     amount: float = Field(..., gt=0, description='Amount to deposit')
