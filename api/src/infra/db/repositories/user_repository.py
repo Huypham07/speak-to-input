@@ -156,6 +156,25 @@ class AccountRepository(BaseRepository):
 
             return from_account, to_account
 
+    async def get_other_users_accounts(self, exclude_user_id: int) -> list[tuple[AccountModel, UserModel]]:
+        """Get all accounts from other users (excluding current user)
+
+        Returns list of tuples (AccountModel, UserModel) for accounts of other users
+        """
+        async with self.session_factory() as session:
+            # Join AccountModel with UserModel to get user info
+            result = await session.execute(
+                select(AccountModel, UserModel)
+                .join(UserModel, AccountModel.user_id == UserModel.id)
+                .where(
+                    AccountModel.user_id != exclude_user_id,
+                    AccountModel.is_active == True,
+                    UserModel.is_active == True,
+                )
+                .order_by(UserModel.full_name, AccountModel.account_name),
+            )
+            return list(result.all())
+
 
 class ContactRepository(BaseRepository):
     """Repository for Contact management"""

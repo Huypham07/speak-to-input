@@ -41,7 +41,7 @@ async def create_transfer(
             intent_type=IntentType.SEND_MONEY.value,
             parameters={
                 'amount': request.amount,
-                'recipient_account_number': request.recipient_account_number,
+                'recipient': request.recipient_account_number,  # Plugin expects 'recipient' not 'recipient_account_number'
                 'message': request.message or '',
             },
             context={

@@ -33,7 +33,11 @@ export function Navbar() {
     { href: "/funds", icon: PiggyBank, label: "Tiết kiệm" },
   ];
 
-  const isActive = (href: string) => pathname === href || pathname.startsWith(href);
+  const isActive = (href: string) => {
+    // Remove query string from href for comparison
+    const hrefPath = href.split('?')[0];
+    return pathname === hrefPath || pathname.startsWith(hrefPath);
+  };
 
   const handleSpeechClick = async () => {
     console.log("🎤 Speech button clicked");

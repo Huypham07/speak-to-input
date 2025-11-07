@@ -10,6 +10,7 @@ from api.helpers.dependencies import get_current_user
 from api.helpers.jwt_auth import TokenData
 from api.schemas import AccountResponse
 from api.schemas import DepositRequest
+from api.schemas import OtherUserAccountResponse
 from api.schemas import TransactionResponse
 from api.schemas import WithdrawRequest
 from domain.entities import Account
@@ -84,6 +85,42 @@ async def list_accounts(
         AccountResponse.model_validate(acc)
         for acc in accounts
     ]
+
+
+@router.get('/others', response_model=List[OtherUserAccountResponse])
+async def list_other_users_accounts(
+    current_user: TokenData = Depends(get_current_user),
+    account_repo: AccountRepository = Depends(get_account_repository),
+):
+    """
+    List all accounts from other users (excluding current user).
+    Useful for transfer form to show available recipients.
+    """
+    try:
+        accounts_with_users = await account_repo.get_other_users_accounts(
+            exclude_user_id=int(current_user.user_id),
+        )
+
+        return [
+            OtherUserAccountResponse(
+                id=account.id,
+                account_number=account.account_number,
+                account_name=account.account_name,
+                balance=float(account.balance),
+                currency=account.currency,
+                account_type=account.account_type,
+                is_active=account.is_active,
+                user_id=user.id,
+                user_full_name=user.full_name,
+                user_username=user.username,
+            )
+            for account, user in accounts_with_users
+        ]
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f'Failed to fetch other users accounts: {str(e)}',
+        )
 
 
 @router.get('/transactions', response_model=List[TransactionResponse])

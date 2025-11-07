@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
+import { useState, useCallback, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +19,7 @@ interface TransferFormProps {
 }
 
 export function TransferForm({ accountId, currentBalance, onSuccess }: TransferFormProps) {
+  const searchParams = useSearchParams();
   const [recipientAccountNumber, setRecipientAccountNumber] = useState("");
   const [recipientName, setRecipientName] = useState("");
   const [amount, setAmount] = useState("");
@@ -25,6 +27,23 @@ export function TransferForm({ accountId, currentBalance, onSuccess }: TransferF
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
+  // Read URL params and auto-fill form
+  useEffect(() => {
+    try {
+      const accountNumber = searchParams.get("accountNumber");
+      const recipientNameParam = searchParams.get("recipientName");
+      if (accountNumber && accountNumber.trim()) {
+        setRecipientAccountNumber(accountNumber.trim());
+      }
+      if (recipientNameParam && recipientNameParam.trim()) {
+        setRecipientName(recipientNameParam.trim());
+      }
+    } catch (error) {
+      // useSearchParams might not be available in some contexts
+      console.error("Error reading search params:", error);
+    }
+  }, [searchParams]);
+  
   // Handle voice parameters
   const handleVoiceParameters = useCallback((params: Record<string, any>) => {
     console.log("📝 Filling transfer form with voice params:", params);
@@ -50,7 +69,11 @@ export function TransferForm({ accountId, currentBalance, onSuccess }: TransferF
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!recipientAccountNumber || !amount || parseFloat(amount) <= 0) {
+    // Trim values to ensure no whitespace issues
+    const trimmedAccountNumber = recipientAccountNumber.trim();
+    const trimmedAmount = amount.trim();
+
+    if (!trimmedAccountNumber || !trimmedAmount || parseFloat(trimmedAmount) <= 0) {
       toast({
         title: "Lỗi",
         description: "Vui lòng nhập đầy đủ thông tin",
@@ -59,7 +82,8 @@ export function TransferForm({ accountId, currentBalance, onSuccess }: TransferF
       return;
     }
 
-    if (parseFloat(amount) > currentBalance) {
+    const amountValue = parseFloat(trimmedAmount);
+    if (amountValue > currentBalance) {
       toast({
         title: "Lỗi",
         description: "Số dư không đủ",
@@ -78,10 +102,10 @@ export function TransferForm({ accountId, currentBalance, onSuccess }: TransferF
         },
         body: JSON.stringify({
           from_account_id: accountId,
-          recipient_account_number: recipientAccountNumber,
-          recipient_name: recipientName || null,
-          amount: parseFloat(amount),
-          message: message || null,
+          recipient_account_number: trimmedAccountNumber,
+          recipient_name: recipientName?.trim() || null,
+          amount: amountValue,
+          message: message?.trim() || null,
         }),
       });
 
@@ -99,7 +123,7 @@ export function TransferForm({ accountId, currentBalance, onSuccess }: TransferF
 
       toast({
         title: "Thành công",
-        description: `Chuyển ${parseFloat(amount).toLocaleString("vi-VN")} VND thành công`,
+        description: `Chuyển ${amountValue.toLocaleString("vi-VN")} VND thành công`,
       });
 
       // Reset form
