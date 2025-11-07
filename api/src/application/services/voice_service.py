@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import base64
 import os
 import tempfile
 
 import aiohttp
+from infra.llm.llm_service import LLMService
 from shared.logging import get_logger
 from shared.settings import Settings
 
@@ -19,24 +19,27 @@ class VoiceService:
     3. Streaming ASR support
     """
 
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, llm_service: LLMService = None):
         self.settings = settings
-        self.server_url = f"{settings.whisper.host}:{settings.whisper.port}"
+        host = settings.whisper.host or settings.whisper.host2 or 'http://localhost'
+        port = settings.whisper.port or settings.whisper.port2 or 8080
+        self.server_url = f'{host}:{port}'
+        self.llm_service = llm_service or LLMService(settings)
 
     async def load_model(self, model_path: str):
         """Load model via /load endpoint before transcript"""
         async with aiohttp.ClientSession() as session:
             data = aiohttp.FormData()
             data.add_field('model', model_path)
-            async with session.post(f"{self.server_url}/load", data=data) as resp:
+            async with session.post(f'{self.server_url}/load', data=data) as resp:
                 if resp.status != 200:
                     text = await resp.text()
-                    logger.error(f"Failed to load model: {text}")
+                    logger.error(f'Failed to load model: {text}')
                     return False
-                logger.info(f"Model loaded: {model_path}")
+                logger.info(f'Model loaded: {model_path}')
                 return True
 
-    async def speech_to_text(self, audio_bytes: bytes) -> tuple[str, float]:
+    async def speech_to_text(self, audio_bytes: bytes) -> str:
         """
         Convert audio to text using ASR.
 
@@ -44,7 +47,7 @@ class VoiceService:
             audio_data: Base64 encoded audio
 
         Returns:
-            (text, confidence)
+            text
         """
     # Giữ file lại (delete=False) để có thể reopen
         with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp_file:
@@ -52,7 +55,7 @@ class VoiceService:
             tmp_file.flush()
             tmp_path = tmp_file.name
 
-        logger.info(f"Sending audio to server at {self.server_url}/inference")
+        logger.info(f'Sending audio to server at {self.server_url}/inference')
         timeout = aiohttp.ClientTimeout(total=None)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             data = aiohttp.FormData()
@@ -64,84 +67,122 @@ class VoiceService:
                 data.add_field('temperature', '0.0')
                 data.add_field('temperature_inc', '0.2')
                 data.add_field('response_format', 'srt')
-                async with session.post(f"{self.server_url}/inference", data=data) as resp:
+                async with session.post(f'{self.server_url}/inference', data=data) as resp:
                     if resp.status != 200:
                         text = await resp.text()
-                        logger.error(f"Inference failed: {text}")
-                        return '', 0.0
+                        logger.error(f'Inference failed: {text}')
+                        return ''
 
                     ctype = resp.headers.get('Content-Type', '')
                     if 'json' in ctype:
                         result = await resp.json()
                         text = result.get('text', '')
-                        conf = result.get('confidence', 1.0)
                     else:
                         text = await resp.text()
-                        conf = 1.0
-                    logger.debug(f"Raw response:\n{text}")
+                    logger.debug(f'Raw response:\n{text}')
 
-                    return text, conf
+                    return text
             finally:
                 f.close()
                 os.remove(tmp_path)
 
     async def normalize_text(self, text: str) -> str:
         """
-        Normalize text for better intent understanding.
+        Normalize text for better intent understanding using LLM.
+
+        Main normalization tasks:
+        1. Convert Vietnamese number words to digits (e.g., "năm trăm nghìn" -> "500000")
+        2. Convert abbreviated numbers (e.g., "5k" -> "5000", "2tr" -> "2000000")
+        3. Standardize currency expressions to VND numbers
+        4. Clean up and format the text
 
         Examples:
         - "năm trăm nghìn" -> "500000"
         - "2 triệu 5" -> "2500000"
-        - "k" -> "000"
+        - "5k" -> "5000"
+        - "1tr5" -> "1500000"
 
         Args:
             text: Raw text from ASR or user input
 
         Returns:
-            Normalized text
+            Normalized text with numbers converted to digits
         """
 
         logger.info(f'Normalizing text: {text}')
 
-        normalized = text.lower().strip()
+        if not text or not text.strip():
+            return text
 
-        return normalized
+        # Build system prompt for normalization
+        system_prompt = """Bạn là trợ lý chuẩn hóa văn bản tiếng Việt, chuyên chuyển đổi các cách diễn đạt số tiền sang dạng số.
 
-    async def process(
-        self,
-        audio_bytes: bytes,
-    ) -> tuple[str, str, float]:
-        """
-        Process audio input.
+NHIỆM VỤ:
+1. Chuyển đổi số tiền từ chữ sang số (VD: "năm trăm nghìn" -> "500000")
+2. Xử lý các từ viết tắt: "k" = 1000, "tr" hoặc "triệu" = 1000000
+3. Giữ nguyên các từ không phải số
+4. Trả về câu đã chuẩn hóa, KHÔNG giải thích
 
-        Args:
-            audio_data: Base64 encoded audio
+QUY TẮC CHUYỂN ĐỔI SỐ TIỀN:
+- "nghìn" = 1,000 (x1000)
+- "k" = 1,000 (x1000)
+- "triệu" = 1,000,000 (x1000000)
+- "tr" = 1,000,000 (x1000000)
+- "trăm nghìn" = 100,000
+- "trăm k" = 100,000
 
-        Returns:
-            (original_text, normalized_text, confidence)
-        """
-        # Step 1: ASR
-        asr_text, confidence = await self.speech_to_text(audio_bytes)
+VÍ DỤ:
+Input: "chuyển cho mẹ năm trăm nghìn"
+Output: "chuyển cho mẹ 500000"
 
-        # Step 2: Normalize
-        normalized = await self.normalize_text(asr_text)
+Input: "thanh toán hóa đơn điện 2 triệu 5"
+Output: "thanh toán hóa đơn điện 2500000"
 
-        return asr_text, normalized, confidence
+Input: "gửi tiết kiệm 1tr5"
+Output: "gửi tiết kiệm 1500000"
 
-    async def stream_asr(self, audio_chunk: str) -> str:
-        """
-        Process audio chunk for streaming ASR (partial transcript).
+Input: "chuyển 50k cho anh"
+Output: "chuyển 50000 cho anh"
 
-        This is used for real-time feedback during recording.
+Input: "tạo quỹ du lịch mục tiêu 10 triệu"
+Output: "tạo quỹ du lịch mục tiêu 10000000"
 
-        Args:
-            audio_chunk: Base64 encoded audio chunk
+CHÚ Ý:
+- Luôn chuyển về số VND đầy đủ (không để "k" hoặc "triệu")
+- Giữ nguyên cấu trúc câu, chỉ thay thế phần số
+- Trả về ĐÚNG câu đã chuẩn hóa, không thêm giải thích hay markdown
+"""
 
-        Returns:
-            Partial transcript text
-        """
-        # TODO: Implement streaming ASR
+        user_message = f'Chuẩn hóa câu sau: "{text}"'
 
-        logger.debug('Processing audio chunk for streaming ASR')
+        messages = [
+            {'role': 'system', 'content': system_prompt},
+            {'role': 'user', 'content': user_message},
+        ]
 
-        return ''
+        try:
+            # Call LLM for normalization
+            normalized = await self.llm_service.chat_completion(
+                messages=messages,
+                temperature=0.1,  # Low temperature for consistent results
+                max_tokens=500,
+            )
+
+            if normalized:
+                normalized = normalized.strip()
+                # Remove quotes if LLM wrapped the response
+                if normalized.startswith('"') and normalized.endswith('"'):
+                    normalized = normalized[1:-1]
+                elif normalized.startswith("'") and normalized.endswith("'"):
+                    normalized = normalized[1:-1]
+
+                logger.info(f'Normalized: {text} -> {normalized}')
+                return normalized
+            else:
+                logger.warning('LLM returned empty response, using original text')
+                return text.lower().strip()
+
+        except Exception as e:
+            logger.error(f'Error normalizing text with LLM: {e}', exc_info=True)
+            # Fallback to basic normalization
+            return text.lower().strip()

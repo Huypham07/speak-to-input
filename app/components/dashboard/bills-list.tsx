@@ -43,6 +43,39 @@ export function BillsList({ onCreateBill }: BillsListProps) {
     }
   };
 
+  const getCategoryText = (category: string) => {
+    switch (category.toLowerCase()) {
+      case "utilities":
+        return "Tiện ích";
+      case "rent":
+        return "Tiền thuê";
+      case "insurance":
+        return "Bảo hiểm";
+      case "subscription":
+        return "Đăng ký";
+      case "internet":
+        return "Internet";
+      case "phone":
+        return "Điện thoại";
+      case "electricity":
+        return "Điện";
+      case "water":
+        return "Nước";
+      case "gas":
+        return "Gas";
+      case "healthcare":
+        return "Y tế";
+      case "education":
+        return "Giáo dục";
+      case "entertainment":
+        return "Giải trí";
+      case "other":
+        return "Khác";
+      default:
+        return category;
+    }
+  };
+
   if (bills.length === 0) {
     return (
       <Card>
@@ -96,25 +129,25 @@ export function BillsList({ onCreateBill }: BillsListProps) {
           {bills.map((bill) => (
             <div
               key={bill.id}
-              className="flex items-center justify-between p-3 border border-border rounded-lg hover:shadow-md transition-shadow">
+              className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 border border-border rounded-lg hover:shadow-md transition-shadow">
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 <div className="w-10 h-10 rounded-full bg-orange-100 dark:bg-orange-900 flex items-center justify-center shrink-0">
                   <FileText className="h-5 w-5 text-orange-600" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="font-medium truncate">{bill.bill_name}</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <p className="text-xs text-muted-foreground">{bill.category}</p>
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    <p className="text-xs text-muted-foreground">{getCategoryText(bill.category)}</p>
                     <span className="text-xs text-muted-foreground">•</span>
                     <p className="text-xs text-muted-foreground">
-                      {new Date(bill.dueDate).toLocaleDateString("vi-VN")}
+                      Hạn: {new Date(bill.dueDate).toLocaleDateString("vi-VN")}
                     </p>
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-3 shrink-0 ml-2">
-                <div className="text-right">
-                  <p className="font-semibold">{bill.amount.toLocaleString("vi-VN")} đ</p>
+              <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                <div className="text-left sm:text-right">
+                  <p className="font-semibold text-base sm:text-sm">{bill.amount.toLocaleString("vi-VN")} đ</p>
                   <Badge
                     variant="outline"
                     className={`text-xs mt-1 ${
@@ -132,8 +165,8 @@ export function BillsList({ onCreateBill }: BillsListProps) {
                     size="sm"
                     onClick={() => handlePayBill(bill.id, bill.bill_name)}
                     disabled={payingBillId === bill.id}
-                    className="shrink-0">
-                    <CreditCard className="h-4 w-4 mr-1" />
+                    className="shrink-0 whitespace-nowrap">
+                    <CreditCard className="h-4 w-4 sm:mr-1" />
                     {payingBillId === bill.id ? "Đang xử lý..." : "Thanh toán"}
                   </Button>
                 )}

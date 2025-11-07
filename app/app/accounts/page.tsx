@@ -13,6 +13,7 @@ import { Wallet, ArrowUpRight, ArrowDownRight, Clock, ChevronLeft, Users } from 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { fetchWithAuth } from "@/lib/fetch-auth";
 
 interface Account {
   id: number;
@@ -70,7 +71,7 @@ function AccountsPageContent() {
   const fetchAccounts = async () => {
     setLoading(true);
     try {
-      const response = await fetch("/api/accounts");
+      const response = await fetchWithAuth("/api/accounts");
       if (response.ok) {
         const data = await response.json();
         setAccounts(data);

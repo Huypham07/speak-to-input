@@ -9,12 +9,32 @@ import { BillsList } from "@/components/dashboard/bills-list";
 import { BillForm } from "@/components/financial/bill-form";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ChevronLeft } from "lucide-react";
+import { useSpeech } from "@/lib/speech-context";
+import { VoiceFormSync } from "@/components/speech/voice-form-sync";
 
 export default function BillsPage() {
   const { user, isLoading } = useAuth();
   const { isCollapsed } = useSidebar();
   const router = useRouter();
   const [isCreating, setIsCreating] = useState(false);
+  const { extractedIntent } = useSpeech();
+
+  // Auto-open dialog ONLY when voice intent has sufficient parameters
+  useEffect(() => {
+    if (!extractedIntent || extractedIntent.intent_changed) return;
+
+    const { intent_type, parameters } = extractedIntent;
+
+    // CREATE_BILL: Auto-open if has basic info (bill_name or amount)
+    if (intent_type === "create_bill" && (parameters.bill_name || parameters.amount)) {
+      setIsCreating(true);
+    }
+
+    // PAY_BILL: Auto-open ONLY if has bill_id (otherwise just navigate to list)
+    if (intent_type === "pay_bill" && parameters.bill_id) {
+      setIsCreating(true);
+    }
+  }, [extractedIntent]);
 
   // Redirect to login if not authenticated
   useEffect(() => {

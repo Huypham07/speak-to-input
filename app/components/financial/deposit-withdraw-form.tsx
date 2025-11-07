@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Wallet, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { fetchWithAuth } from "@/lib/fetch-auth";
 
 interface DepositWithdrawFormProps {
   accountId: number;
@@ -37,7 +38,7 @@ export function DepositWithdrawForm({ accountId, currentBalance, onSuccess }: De
     setLoading(true);
 
     try {
-      const response = await fetch(`/api/accounts/deposit`, {
+      const response = await fetchWithAuth(`/api/accounts/deposit`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

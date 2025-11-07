@@ -36,19 +36,21 @@ class LLMSettings(BaseSettings):
     provider: str = Field(default='gemini', description='LLM provider: gemini or bedrock')
     api_key: str = Field(default='', description='Google Gemini API key')
     model: str = Field(default='gemini-2.5-flash', description='Gemini model name')
-    
+
     # AWS Bedrock settings
     aws_region: str = Field(default='us-east-1', description='AWS region for Bedrock')
     aws_access_key_id: str = Field(default='', description='AWS access key ID for Bedrock')
     aws_secret_access_key: str = Field(default='', description='AWS secret access key for Bedrock')
-    
+
     class Config:
         env_prefix = 'LLM_'
 
 
 class WhisperSettings(BaseSettings):
-    host: str = Field(default='http://localhost')
+    host: str = Field(default='')
     port: int = Field(default=8080)
+    host2: str = Field(default='')
+    port2: int = Field(default=8081)
 
     class Config:
         env_prefix = 'WHISPER_'

@@ -6,6 +6,7 @@ import { TrendingUp, Wallet, ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRouter } from "next/navigation";
+import { fetchWithAuth } from "@/lib/fetch-auth";
 
 interface Account {
   id: number;
@@ -26,7 +27,7 @@ export function BalanceCard() {
   useEffect(() => {
     const fetchAccounts = async () => {
       try {
-        const response = await fetch("/api/accounts");
+        const response = await fetchWithAuth("/api/accounts");
 
         if (response.ok) {
           const data = await response.json();

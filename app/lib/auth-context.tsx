@@ -2,6 +2,7 @@
 
 import type React from "react";
 import { createContext, useContext, useState, useCallback, useEffect } from "react";
+import { fetchWithAuth } from "@/lib/fetch-auth";
 
 interface User {
   id: number;
@@ -34,29 +35,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchUserInfo = async () => {
     setIsLoading(true); // Start loading
     try {
-      // No need to pass token - cookie will be sent automatically
-      const response = await fetch("/api/auth/me");
+      const response = await fetchWithAuth("/api/auth/me");
 
       if (response.ok) {
         const userData = await response.json();
         setUser(userData);
-      } else if (response.status === 401) {
-        // Token expired, try to refresh using refresh token from cookie
-        console.log("Access token expired, attempting refresh...");
-        const refreshed = await refreshAccessToken();
-        if (refreshed) {
-          // Retry fetching user info
-          const retryResponse = await fetch("/api/auth/me");
-          if (retryResponse.ok) {
-            const userData = await retryResponse.json();
-            setUser(userData);
-            return;
-          }
-        }
-        // Refresh failed, clear user
-        setUser(null);
       } else {
-        // Other errors
+        // If still failed after auto-retry, clear user
         setUser(null);
       }
     } catch (error) {
@@ -64,26 +49,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null);
     } finally {
       setIsLoading(false); // Done loading
-    }
-  };
-
-  const refreshAccessToken = async (): Promise<boolean> => {
-    try {
-      // Refresh endpoint reads refresh_token from httpOnly cookie
-      const response = await fetch("/api/auth/refresh", {
-        method: "POST",
-        credentials: "include", // Send cookies
-      });
-
-      if (response.ok) {
-        return true;
-      } else {
-        console.error("Failed to refresh token");
-        return false;
-      }
-    } catch (error) {
-      console.error("Error refreshing token:", error);
-      return false;
     }
   };
 
@@ -102,6 +67,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (!response.ok) {
         throw new Error(data.error || "Login failed");
+      }
+
+      // Store access_token in localStorage for WebSocket connection
+      if (data.access_token) {
+        localStorage.setItem("access_token", data.access_token);
       }
 
       // Cookies are set by backend, just fetch user info
@@ -146,6 +116,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     // Clear user state immediately
     setUser(null);
+
+    // Clear localStorage
+    localStorage.removeItem("access_token");
 
     // Call backend logout to clear cookies
     try {

@@ -3,26 +3,55 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { TrendingUp, TrendingDown, DollarSign, Calendar } from "lucide-react";
 import { useFinancial } from "@/lib/financial-context";
+import { useAuth } from "@/lib/auth-context";
+import { useEffect, useState } from "react";
+import { fetchWithAuth } from "@/lib/fetch-auth";
 
 export function StatisticsOverview() {
   const { transfers, bills, funds } = useFinancial();
+  const { user } = useAuth();
+  const [userAccountIds, setUserAccountIds] = useState<number[]>([]);
+
+  // Fetch user's account IDs to filter outgoing transfers
+  useEffect(() => {
+    const fetchAccounts = async () => {
+      if (!user) return;
+
+      try {
+        const response = await fetchWithAuth("/api/accounts");
+        if (response.ok) {
+          const accounts = await response.json();
+          setUserAccountIds(accounts.map((acc: any) => acc.id));
+        }
+      } catch (error) {
+        console.error("Error fetching accounts:", error);
+      }
+    };
+
+    fetchAccounts();
+  }, [user]);
 
   // Calculate statistics
-  const totalTransfers = transfers.reduce((sum, t) => sum + t.amount, 0);
+  // Only count transfers FROM user's accounts (outgoing transfers)
+  const outgoingTransfers = transfers.filter((t) => userAccountIds.includes(t.fromAccountId));
+  const totalTransfersOut = outgoingTransfers.reduce((sum, t) => sum + t.amount, 0);
+
   const pendingBills = bills.filter((b) => b.status === "pending");
   const totalPendingBills = pendingBills.reduce((sum, b) => sum + b.amount, 0);
-  const totalFunds = funds.reduce((sum, f) => sum + f.currentAmount, 0);
-  const totalFundTargets = funds.reduce((sum, f) => sum + f.targetAmount, 0);
+
+  // Use current_amount for actual savings
+  const totalFunds = funds.reduce((sum, f) => sum + f.current_amount, 0);
+  const totalFundTargets = funds.reduce((sum, f) => sum + f.target_amount, 0);
   const savingsProgress = totalFundTargets > 0 ? (totalFunds / totalFundTargets) * 100 : 0;
 
   const stats = [
     {
       title: "Tổng đã chuyển",
-      value: `${totalTransfers.toLocaleString("vi-VN")} đ`,
+      value: `${totalTransfersOut.toLocaleString("vi-VN")} đ`,
       icon: TrendingDown,
       color: "text-orange-600",
       bgColor: "bg-orange-50 dark:bg-orange-950/20",
-      description: `${transfers.length} giao dịch`,
+      description: `${outgoingTransfers.length} giao dịch`,
     },
     {
       title: "Hóa đơn chưa thanh toán",

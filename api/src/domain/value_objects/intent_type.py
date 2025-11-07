@@ -21,18 +21,8 @@ class IntentType(str, Enum):
     CHECK_BALANCE = 'CHECK_BALANCE'
     QUERY_FINANCE = 'QUERY_FINANCE'
 
-    # Account intents
-    ACCOUNT_OPENING = 'ACCOUNT_OPENING'
-
-    # Other intents
-    QUICK_ACTION = 'QUICK_ACTION'
-    CREATE_LOAN = 'CREATE_LOAN'
-    BUDGET_ALLOCATION = 'BUDGET_ALLOCATION'
-
     # Meta intents
     UNKNOWN = 'UNKNOWN'
-    CONFIRMATION = 'CONFIRMATION'
-    CANCELLATION = 'CANCELLATION'
 
 
 class IntentCategory(str, Enum):

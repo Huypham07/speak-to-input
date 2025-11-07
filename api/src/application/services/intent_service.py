@@ -3,31 +3,15 @@ from __future__ import annotations
 import json
 from typing import Any
 from typing import Dict
+from typing import Optional
 
 from domain.plugins.registry import IntentPluginRegistry
 from domain.value_objects.intent_type import IntentType
 from infra.llm.llm_service import LLMService
-from pydantic import BaseModel
-from pydantic import Field
 from shared.logging import get_logger
 from shared.settings import Settings
 
 logger = get_logger(__name__)
-
-
-class IntentUnderstandingInput(BaseModel):
-    text: str
-    context: Dict[str, Any] = {}
-
-
-class IntentUnderstandingOutput(BaseModel):
-    """Result of intent understanding"""
-
-    intent_type: IntentType
-    confidence: float = Field(..., ge=0.0, le=1.0)
-
-    # Extracted parameters
-    parameters: Dict[str, Any] = Field(default_factory=dict)
 
 
 class IntentUnderstandingService:
@@ -81,21 +65,21 @@ class IntentUnderstandingService:
 
                 # Format: "field_name (type) - description [required/optional]"
                 requirement = 'required' if is_required else 'optional'
-                param_descriptions.append(f"{param_name} ({param_type}, {requirement}): {param_desc}")
+                param_descriptions.append(f'{param_name} ({param_type}, {requirement}): {param_desc}')
 
             params_str = '\n   '.join(param_descriptions) if param_descriptions else 'không có parameters'
 
             # Add to prompt
             prompt_parts.append(
-                f"\n{idx}. {plugin.intent_type} - {plugin.display_name}",
+                f'\n{idx}. {plugin.intent_type} - {plugin.display_name}',
             )
             if plugin.description:
-                prompt_parts.append(f"   Mô tả: {plugin.description}")
-            prompt_parts.append(f"   Parameters:\n   {params_str}")
+                prompt_parts.append(f'   Mô tả: {plugin.description}')
+            prompt_parts.append(f'   Parameters:\n   {params_str}')
 
         # Add UNKNOWN intent
         num_intents = len(plugins) + 1
-        prompt_parts.append(f"\n{num_intents}. UNKNOWN - Không xác định được (dùng khi không match intent nào)")
+        prompt_parts.append(f'\n{num_intents}. UNKNOWN - Không xác định được (dùng khi không match intent nào)')
 
         # Add general notes
         prompt_parts.append('\n\nCHÚ Ý:')
@@ -107,36 +91,99 @@ class IntentUnderstandingService:
         self.system_prompt = '\n'.join(prompt_parts)
 
         # Log the generated prompt for debugging
-        logger.debug(f"Generated system prompt:\n{self.system_prompt}")
+        logger.debug(f'Generated system prompt:\n{self.system_prompt}')
 
-    async def process(
+    async def extract_intent_and_params(
         self,
-        input: IntentUnderstandingInput,
-    ) -> IntentUnderstandingOutput:
+        text: str,
+        form_data: Optional[Dict[str, Any]] = None,
+        hint_intent_type: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
-        Classify user intent and extract parameters using LLM.
+        Extract intent and parameters from text with optional form data and hint.
 
         Args:
-            text: Normalized text from voice service
-            context: Current context (user state, previous intents, etc.)
+            text: Input text to analyze
+            form_data: Optional form data with existing parameters (when hint_intent_type is provided)
+            hint_intent_type: Optional hint about the expected intent type
 
         Returns:
-            IntentResult with classification and parameters
+            Dict with 'intent_type', 'parameters', and 'confidence'
         """
+        logger.info(f'Extracting intent and params from: "{text}"')
+        if form_data:
+            logger.info(f'Form data: {form_data}')
+        if hint_intent_type:
+            logger.info(f'Hint intent type: {hint_intent_type}')
 
-        text = input.text
-        context = input.context
+        # Case 1: No hint intent type - classify normally
+        if not hint_intent_type:
+            context: Dict[str, Any] = {}
+            if form_data:
+                context['form_data'] = form_data
 
-        logger.info(f'Classifying intent for: {text}')
+            intent_type, parameters, confidence = await self._classify(text, context)
 
-        # Use LLM to classify intent
+            return {
+                'intent_type': intent_type.value if isinstance(intent_type, IntentType) else intent_type,
+                'parameters': parameters,
+                'confidence': confidence,
+            }
+
+        # Case 2: Hint intent type provided - build context with hint and form_data
+        form_data = form_data or {}
+
+        # Get plugin for hint intent to know schema and determine missing fields
+        plugin = self.plugin_registry.get_plugin(hint_intent_type)
+        if not plugin:
+            logger.warning(f'Plugin not found for intent: {hint_intent_type}, falling back to normal classification')
+            intent_type, parameters, confidence = await self._classify(text, {})
+            return {
+                'intent_type': intent_type.value if isinstance(intent_type, IntentType) else intent_type,
+                'parameters': parameters,
+                'confidence': confidence,
+            }
+
+        # Get required fields from schema
+        schema = plugin.get_parameter_schema()
+        required_fields = schema.get('required', [])
+
+        # Determine missing fields
+        missing_fields = [field for field in required_fields if field not in form_data or form_data.get(field) is None]
+
+        # Build context with all necessary info for system prompt
+        context = {
+            'hint_intent_type': hint_intent_type,
+            'form_data': form_data,
+            'missing_fields': missing_fields,
+            'schema': schema,
+        }
+
+        # Use LLM to classify (system prompt will handle intent change check and missing params extraction)
         intent_type, parameters, confidence = await self._classify(text, context)
 
-        return IntentUnderstandingOutput(
-            intent_type=intent_type,
-            confidence=confidence,
-            parameters=parameters,
-        )
+        # Check if intent changed
+        if intent_type.value != hint_intent_type:
+            # Intent changed - return new intent with all params
+            logger.info(f'User changed intent from {hint_intent_type} to {intent_type.value}')
+            return {
+                'intent_type': intent_type.value if isinstance(intent_type, IntentType) else intent_type,
+                'parameters': parameters,
+                'confidence': confidence,
+            }
+
+        # Same intent - merge form_data with extracted parameters
+        # Merge form_data (existing) with parameters (newly extracted missing fields)
+        merged_parameters = {**form_data, **parameters}
+
+        logger.info(f'Extracted missing params for {hint_intent_type}, merged with existing data')
+        logger.info(f'Existing: {form_data}, New: {parameters}, Merged: {merged_parameters}')
+
+        return {
+            'intent_type': hint_intent_type,
+            'parameters': merged_parameters,  # Return merged form_data + new missing fields
+            'confidence': confidence,
+        }
 
     async def _classify(
         self,
@@ -150,13 +197,16 @@ class IntentUnderstandingService:
             (intent_type, parameters, confidence)
         """
 
+        # Build system prompt based on context
+        system_prompt = self._build_classify_prompt(context)
+
         # Build user message with context
         user_message = f"Phân tích lệnh: \"{text}\""
         if context:
-            user_message += f"\n\nContext: {json.dumps(context, ensure_ascii=False)}"
+            user_message += f'\n\nContext: {json.dumps(context, ensure_ascii=False)}'
 
         messages = [
-            {'role': 'system', 'content': self.system_prompt},
+            {'role': 'system', 'content': system_prompt},
             {'role': 'user', 'content': user_message},
         ]
 
@@ -172,10 +222,6 @@ class IntentUnderstandingService:
             intent_str = result.get('intent', 'UNKNOWN')
             confidence = float(result.get('confidence', 0.0))
             parameters = result.get('parameters', {})
-
-            # Normalize amount if present (convert Vietnamese text to number)
-            if 'amount' in parameters:
-                parameters['amount'] = self._normalize_amount(parameters['amount'])
 
             # Convert intent string to enum
             try:
@@ -194,199 +240,63 @@ class IntentUnderstandingService:
             logger.error(f'Failed to parse LLM result: {e}', exc_info=True)
             return IntentType.UNKNOWN, {}, 0.0
 
-    def _normalize_amount(self, amount_value: Any) -> float:
+    def _build_classify_prompt(self, context: Dict[str, Any]) -> str:
         """
-        Normalize amount from various formats to number.
+        Build system prompt for classification based on context.
 
-        Examples:
-            "500 nghìn" -> 500000
-            "1.5 triệu" -> 1500000
-            "500000" -> 500000
-            500000 -> 500000
+        If hint_intent_type is provided:
+        - Check if user wants to change intent
+        - If same intent: extract only missing params
+        - If different intent: extract all params for new intent
         """
-        if isinstance(amount_value, (int, float)):
-            return float(amount_value)
+        hint_intent_type = context.get('hint_intent_type')
+        form_data = context.get('form_data', {})
+        missing_fields = context.get('missing_fields', [])
+        schema = context.get('schema')
 
-        if not isinstance(amount_value, str):
-            return 0.0
+        # Base prompt
+        prompt_parts = [self.system_prompt]
 
-        text = amount_value.lower().strip()
+        # If hint_intent_type is provided, add special instructions
+        if hint_intent_type:
+            prompt_parts.append('\n\n=== TÌNH HUỐNG ĐẶC BIỆT ===')
+            prompt_parts.append(f'Intent hiện tại đang được xử lý: {hint_intent_type}')
+            prompt_parts.append(f'Dữ liệu đã có: {json.dumps(form_data, ensure_ascii=False)}')
 
-        # Extract number
-        import re
-        number_match = re.search(r'[\d.,]+', text)
-        if not number_match:
-            return 0.0
+            if missing_fields:
+                # Build missing fields description
+                properties = schema.get('properties', {}) if schema else {}
+                missing_desc = []
+                for field in missing_fields:
+                    if field in properties:
+                        field_info = properties[field]
+                        field_desc = field_info.get('description', field)
+                        field_type = field_info.get('type', 'any')
+                        missing_desc.append(f'- {field} ({field_type}): {field_desc}')
+                    else:
+                        missing_desc.append(f'- {field}')
 
-        number_str = number_match.group().replace(',', '.')
-        try:
-            base_number = float(number_str)
-        except ValueError:
-            return 0.0
-        
-        # Apply multiplier (VN + EN)
-        text_no_space = text.replace(' ', '')
+                prompt_parts.append('\nCác field còn thiếu cần extract:')
+                prompt_parts.extend(missing_desc)
 
-        thousand_markers = [
-            'nghìn', 'nghin', 'k', 'thousand', 'ngàn', 'ngan'
-        ]
-        million_markers = [
-            'triệu', 'trieu', 'm', 'million', 'mn', 'mil'
-        ]
+                prompt_parts.append('\nNHIỆM VỤ:')
+                prompt_parts.append('1. Phân tích xem người dùng có đang muốn CHUYỂN SANG INTENT MỚI không:')
+                prompt_parts.append('   - Nếu có: Trả về intent mới và TẤT CẢ parameters của intent mới')
+                prompt_parts.append(f'   - Nếu không: Trả về intent hiện tại ({hint_intent_type}) và các parameters')
+                prompt_parts.append('2. Parameters có thể là:')
+                prompt_parts.append('   - Các field còn thiếu (missing_fields) - CẦN extract')
+                prompt_parts.append('   - Các field đã có nhưng user muốn SỬA LẠI - CẦN extract giá trị mới')
+                prompt_parts.append('3. Nếu user nói lại giá trị của field đã có (ví dụ: "không, 1 triệu nhé"), đó là muốn SỬA LẠI, hãy extract field đó với giá trị mới')
+                prompt_parts.append('4. Nếu đã đủ tất cả parameters và user không muốn sửa gì, vẫn kiểm tra intent change nhưng có thể trả về empty parameters')
+            else:
+                prompt_parts.append('\nTất cả parameters đã đủ.')
+                prompt_parts.append('NHIỆM VỤ:')
+                prompt_parts.append('1. Phân tích xem người dùng có muốn CHUYỂN SANG INTENT MỚI không.')
+                prompt_parts.append('   - Nếu có: Trả về intent mới và TẤT CẢ parameters')
+                prompt_parts.append('   - Nếu không: Tiếp tục bước 2')
+                prompt_parts.append('2. Phân tích xem người dùng có muốn SỬA LẠI parameters đã có không:')
+                prompt_parts.append('   - Nếu user nói lại giá trị (ví dụ: "không, 1 triệu nhé" khi amount hiện tại là 500000): Hãy extract field đó với giá trị mới')
+                prompt_parts.append(f'   - Nếu không muốn sửa: Trả về intent hiện tại ({hint_intent_type}) và empty parameters {{}}')
+                prompt_parts.append('3. Nếu user muốn sửa, trả về các field được sửa với giá trị mới')
 
-        if any(marker in text for marker in thousand_markers) or any(marker in text_no_space for marker in thousand_markers):
-            return base_number * 1_000
-        if any(marker in text for marker in million_markers) or any(marker in text_no_space for marker in million_markers):
-            return base_number * 1_000_000
-
-        return base_number
-
-    async def extract_clarification_data(
-        self,
-        text: str,
-        missing_fields: list,
-        current_data: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        """
-        Extract missing data from user's clarification response using LLM.
-
-        Args:
-            text: User's clarification input
-            missing_fields: List of fields that were missing
-            current_data: Already collected data
-
-        Returns:
-            Extracted data for missing fields
-        """
-        logger.info(f'Extracting clarification data from: "{text}"')
-        logger.info(f'Missing fields: {missing_fields}')
-        logger.info(f'Current data: {current_data}')
-
-        # Build prompt
-        system_prompt = """Bạn là trợ lý AI chuyên trích xuất thông tin từ câu trả lời của người dùng.
-
-        Nhiệm vụ: Trích xuất các trường dữ liệu còn thiếu từ câu trả lời.
-
-        CHÚ Ý:
-        - Số tiền: "500 nghìn" -> 500000, "1.5 triệu" -> 1500000
-        - Trả về JSON với các field được extract, không có field nào thì để {}
-        - Chỉ trả về các field có trong danh sách missing_fields
-        """
-
-        user_message = f"""Dữ liệu hiện tại: {json.dumps(current_data, ensure_ascii=False)}
-        Các field còn thiếu: {json.dumps(missing_fields, ensure_ascii=False)}
-        Câu trả lời của user: "{text}"
-
-        Hãy trích xuất các field còn thiếu từ câu trả lời. Trả về JSON format.
-        """
-
-        messages = [
-            {'role': 'system', 'content': system_prompt},
-            {'role': 'user', 'content': user_message},
-        ]
-
-        # Call LLM
-        result = await self.llm_service.structured_completion(messages, temperature=0.2)
-
-        if not result:
-            logger.warning('LLM returned no result for clarification')
-            return {}
-
-        # Normalize amounts
-        if 'amount' in result:
-            result['amount'] = self._normalize_amount(result['amount'])
-
-        logger.info(f'Extracted data: {result}')
-        return result
-
-    async def parse_confirmation(self, text: str) -> Dict[str, Any]:
-        """
-        Parse user's confirmation/cancellation response.
-
-        Args:
-            text: User's response text
-
-        Returns:
-            Dict with 'intent' (confirm/cancel/unclear) and optional details
-        """
-        # TODO: Use LLM or pattern matching to detect confirmation
-        # - "có", "đồng ý", "ok", "yes" -> confirm
-        # - "không", "hủy", "thôi", "cancel" -> cancel
-        # - Others -> unclear
-
-        logger.info(f'Parsing confirmation: {text}')
-
-        text_lower = text.lower().strip()
-
-        # Simple pattern matching (replace with LLM)
-        if any(word in text_lower for word in ['có', 'đồng ý', 'ok', 'yes', 'được', 'ừ']):
-            return {'intent': 'confirm'}
-        elif any(word in text_lower for word in ['không', 'hủy', 'thôi', 'cancel', 'no']):
-            return {'intent': 'cancel'}
-        else:
-            return {'intent': 'unclear'}
-
-    async def check_intent_change(
-        self,
-        text: str,
-        current_intent: str,
-    ) -> tuple[bool, str, float]:
-        """
-        Check if user is switching to a new intent using LLM.
-
-        Args:
-            text: User's input
-            current_intent: Currently active intent
-
-        Returns:
-            (is_different, new_intent, confidence)
-        """
-        logger.info(f'Checking intent change. Current: {current_intent}, Text: "{text}"')
-
-        # Build prompt
-        system_prompt = f"""Bạn là trợ lý AI phân tích xem người dùng có đang chuyển sang ý định mới hay không.
-
-        Intent hiện tại: {current_intent}
-
-        Nhiệm vụ: Xác định xem câu nói mới có phải là intent mới khác với intent hiện tại không.
-
-        Trả về JSON:
-        {{
-        "is_different": true/false,
-        "new_intent": "INTENT_TYPE" (nếu khác),
-        "confidence": 0.0-1.0
-        }}
-
-        Ví dụ:
-        - Current: SEND_MONEY, Text: "500 nghìn" -> is_different: false (đang cung cấp thông tin cho intent hiện tại)
-        - Current: SEND_MONEY, Text: "Thôi để sau, xem số dư đi" -> is_different: true, new_intent: CHECK_BALANCE
-        """
-
-        user_message = f"""Intent hiện tại: {current_intent}
-        Câu nói mới: "{text}"
-
-        Người dùng có đang chuyển sang intent mới không?"""
-
-        messages = [
-            {'role': 'system', 'content': system_prompt},
-            {'role': 'user', 'content': user_message},
-        ]
-
-        # Call LLM
-        result = await self.llm_service.structured_completion(messages, temperature=0.2)
-
-        if not result:
-            logger.warning('LLM returned no result for intent change check')
-            return False, current_intent, 1.0
-
-        try:
-            is_different = result.get('is_different', False)
-            new_intent = result.get('new_intent', current_intent)
-            confidence = float(result.get('confidence', 0.5))
-
-            logger.info(f'Intent change: {is_different}, New: {new_intent}, Confidence: {confidence:.2f}')
-            return is_different, new_intent, confidence
-
-        except Exception as e:
-            logger.error(f'Failed to parse intent change result: {e}')
-            return False, current_intent, 1.0
+        return '\n'.join(prompt_parts)

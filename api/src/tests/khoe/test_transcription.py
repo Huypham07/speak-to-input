@@ -12,10 +12,9 @@ from shared.settings import Settings
 async def test_speech_to_text_from_file():
     # Arrange
     #
-    wav_path = 'F:\\Downloads\\sample.wav'
+    wav_path = 'D:\\audio1.wav'
     with open(wav_path, 'rb') as f:
         audio_bytes = f.read()
-    audio_data = base64.b64encode(audio_bytes).decode('utf-8')
 
     service = VoiceService(Settings())
 
@@ -24,8 +23,8 @@ async def test_speech_to_text_from_file():
 
     # Act
     start = time.time()
-    text, confidence = await service.speech_to_text(audio_data)
-    print(f"run for {time.time() - start}")
+    text, confidence = await service.speech_to_text(audio_bytes)
+    print(f'run for {time.time() - start}')
     # Assert
     assert isinstance(text, str)
     assert isinstance(confidence, float)
