@@ -4,7 +4,7 @@ from typing import Callable
 from typing import Type
 from typing import TypeVar
 
-from domain.entities import BaseModel
+from infra.db.models import BaseModel
 from shared.exceptions import DuplicatedError
 from shared.exceptions import NotFoundError
 from sqlalchemy import update

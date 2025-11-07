@@ -15,3 +15,18 @@ exclude = '''
     | dist
 )/
 '''
+
+[tool.pytest.ini_options]
+testpaths = ["api/src/tests"]
+pythonpath = ["api/src"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "-s",
+    "--maxfail=1",
+    "--disable-warnings",
+    "--tb=short"
+]
+asyncio_mode = "auto"

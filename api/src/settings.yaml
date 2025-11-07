@@ -8,3 +8,20 @@ postgres:
   pool_size: 10
   min_connections: 5
   max_connections: 20
+
+secret_key: sti-team-24
+
+whisper:
+  host:
+  port: 8081
+  host2:
+  port2: 8082
+
+llm:
+  provider: gemini # gemini or bedrock
+  model: gemini-2.5-flash
+  api_key: ""
+  # AWS Bedrock settings
+  aws_region: us-east-1
+  aws_access_key_id: ""
+  aws_secret_access_key: ""

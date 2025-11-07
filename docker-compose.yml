@@ -1,28 +1,63 @@
 services:
+  db-app:
+    image: postgres:16
+    container_name: db-app
+    environment:
+      POSTGRES_DB: ${POSTGRES__DATABASE}
+      POSTGRES_USER: ${POSTGRES__USERNAME}
+      POSTGRES_PASSWORD: ${POSTGRES__PASSWORD}
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 10s
+    volumes:
+      - "sti_pgdata:/var/lib/postgresql/data"
+    networks:
+      - share_network
+
+  whisper-service:
+    build:
+      context: ./whisper/
+      dockerfile: Dockerfile
+    container_name: whisper-service
+    ports:
+      - "8081:8080"
+    volumes:
+      - whisper-models:/opt/whisper.cpp/models
+    environment:
+      - TZ=Asia/Ho_Chi_Minh
+    restart: unless-stopped
+    networks:
+      - speak-to-input-network
+      - share_network
+
   api-service:
     build:
-      context: ./api/src/
+      context: ./api/
       dockerfile: Dockerfile
     container_name: speak-to-input
     ports:
       - "8000:8000"
-    volumes:
-      - ./api/src:/app
     environment:
       - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
       - TZ=Asia/Ho_Chi_Minh
     env_file:
       - .env
-    working_dir: /app
-    command:
-      ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     networks:
       - speak-to-input-network
       - share_network
+
+volumes:
+  whisper-models:
+  sti_pgdata:
 
 networks:
   speak-to-input-network:
     driver: bridge
   share_network:
-    external: true
+    driver: bridge
