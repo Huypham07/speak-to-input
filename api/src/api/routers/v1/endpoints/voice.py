@@ -1,18 +1,19 @@
 from __future__ import annotations
 
+import asyncio
 import datetime
 import json
 import os
 from typing import Any
 from typing import Dict
 
+from api.dependencies import get_audio_stream_accumulator
 from api.dependencies import get_intent_service_ws
 from api.dependencies import get_orchestration_service_ws
-from api.dependencies import get_voice_service_ws
+from api.helpers.audio_stream_accumulator import AudioStreamAccumulator
 from api.helpers.jwt_auth import verify_token
 from application.services.intent_service import IntentUnderstandingService
 from application.services.orchestration_service import OrchestrationService
-from application.services.voice_service import VoiceService
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import WebSocket
@@ -51,12 +52,13 @@ manager = VoiceConnectionManager()
 async def voice_stream(
     websocket: WebSocket,
     token: str,
-    voice_service: VoiceService = Depends(get_voice_service_ws),
+    audio_accumulator: AudioStreamAccumulator = Depends(get_audio_stream_accumulator),
     intent_service: IntentUnderstandingService = Depends(get_intent_service_ws),
     orchestration_service: OrchestrationService = Depends(get_orchestration_service_ws),
 ):
     """
     WebSocket endpoint for voice input streaming.
+    Uses AudioStreamAccumulator for efficient audio processing.
     """
     user_id = None
     try:
@@ -73,9 +75,24 @@ async def voice_stream(
         session_data: Dict[str, Any] = {
             'hint_intent_type': None,  # Intent type from current screen
             'form_data': {},  # Existing form data from screen
-            'audio_chunks': [],
             'is_recording': False,
         }
+
+        # Start new session in accumulator
+        audio_accumulator.start_new_session()
+
+        # Callback for when a segment is processed
+        async def on_segment_processed(seg_id: int, text: str):
+            """Send intermediate transcription to client"""
+            logger.debug(f'Segment {seg_id} processed: {text}')
+            await websocket.send_json({
+                'type': 'partial_transcript',
+                'segment_id': seg_id,
+                'text': text,
+            })
+
+        # Set callback
+        audio_accumulator.on_segment = on_segment_processed
 
         while True:
             try:
@@ -107,31 +124,16 @@ async def voice_stream(
 
                     elif message_type == 'stop_recording':
                         # User clicked ✓ (Stop & Save) - process the recording
-                        logger.info(f'Processing recording. Total chunks: {len(session_data["audio_chunks"])}')
+                        logger.info('Stop recording requested')
 
                         session_data['is_recording'] = False
 
-                        if not session_data['audio_chunks']:
-                            logger.warning('No audio chunks to process')
-                            await websocket.send_json({
-                                'type': 'error',
-                                'error': 'No audio data received',
-                            })
-                            continue
-
                         try:
-                            # Step 1: Merge audio chunks
-                            merged_audio = b''.join(session_data['audio_chunks'])
-                            logger.info(f'✅ Merged audio: {len(merged_audio)} bytes from {len(session_data["audio_chunks"])} chunks')
+                            final_text = await audio_accumulator.get_transcription(auto_reset=True)
 
-                            # Step 2: Speech-to-Text + Normalization
-                            logger.info('🎤 Starting STT...')
-                            asr_text, normalized_text = await voice_service.process(merged_audio)
+                            logger.info(f'Final transcription: "{final_text}"')
 
-                            logger.info(f'📝 ASR result: "{asr_text}"')
-                            logger.info(f'🔧 Normalized: "{normalized_text}"')
-
-                            if not normalized_text or not normalized_text.strip():
+                            if not final_text or not final_text.strip():
                                 await websocket.send_json({
                                     'type': 'error',
                                     'error': 'Could not transcribe audio. Please try again.',
@@ -139,9 +141,9 @@ async def voice_stream(
                                 continue
 
                             # Step 3: Intent Understanding
-                            logger.info('🧠 Extracting intent...')
+                            logger.info('Extracting intent...')
                             intent_result = await intent_service.extract_intent_and_params(
-                                text=normalized_text,
+                                text=final_text,
                                 form_data=session_data['form_data'],
                                 hint_intent_type=session_data['hint_intent_type'],
                             )
@@ -149,8 +151,8 @@ async def voice_stream(
                             intent_type = intent_result['intent_type']
                             parameters = intent_result['parameters']
 
-                            logger.info(f'✨ Intent: {intent_type}')
-                            logger.info(f'📋 Parameters: {parameters}')
+                            logger.info(f'Intent: {intent_type}')
+                            logger.info(f'Parameters: {parameters}')
 
                             # Step 4: Check if intent changed
                             intent_changed = (
@@ -173,19 +175,16 @@ async def voice_stream(
                             # Step 6: Prepare response
                             response_data = {
                                 'type': 'intent_extracted',
-                                'asr_text': asr_text,
-                                'normalized_text': normalized_text,
+                                'asr_text': final_text,
+                                'normalized_text': final_text,
                                 'intent_type': intent_type,
                                 'parameters': parameters,
                                 'intent_changed': intent_changed,
                                 'needs_confirmation': needs_confirmation,
                             }
 
-                            logger.info(f'📤 Sending response: intent_changed={intent_changed}, needs_confirmation={needs_confirmation}')
+                            logger.info(f'Sending response: intent_changed={intent_changed}, needs_confirmation={needs_confirmation}')
                             await websocket.send_json(response_data)
-
-                            # Clear audio chunks
-                            session_data['audio_chunks'] = []
 
                         except Exception as e:
                             logger.error(f'Error processing recording: {e}', exc_info=True)
@@ -198,9 +197,6 @@ async def voice_stream(
                         # User confirmed the intent execution
                         intent_type = data.get('intent_type')
                         parameters = data.get('parameters', {})
-
-                        logger.info(f'🚀 Executing confirmed intent: {intent_type}')
-                        logger.info(f'   Parameters: {parameters}')
 
                         try:
                             # Execute via orchestration service
@@ -230,8 +226,10 @@ async def voice_stream(
                     elif message_type == 'cancel':
                         # User clicked ✕ (Cancel) - discard everything
                         logger.info('❌ User cancelled voice input')
-                        session_data['audio_chunks'] = []
                         session_data['is_recording'] = False
+
+                        # Reset accumulator to discard all buffered audio
+                        audio_accumulator.reset_state()
 
                         await websocket.send_json({
                             'type': 'cancelled',
@@ -247,17 +245,17 @@ async def voice_stream(
                 # Handle binary audio chunks
                 elif 'bytes' in message:
                     audio_chunk = message['bytes']
-                    session_data['audio_chunks'].append(audio_chunk)
+
+                    # Add chunk to accumulator for processing
+                    await audio_accumulator.add_chunk(audio_chunk)
 
                     chunk_size = len(audio_chunk)
-                    total_chunks = len(session_data['audio_chunks'])
 
-                    logger.debug(f'>>> Audio chunk received: {chunk_size} bytes (total chunks: {total_chunks})')
+                    logger.debug(f'>>> Audio chunk received: {chunk_size} bytes')
 
                     # Send acknowledgment
                     await websocket.send_json({
                         'type': 'audio_chunk_ack',
-                        'chunk_number': total_chunks,
                         'chunk_size': chunk_size,
                     })
 
@@ -281,11 +279,16 @@ async def voice_stream(
                 break
 
     except WebSocketDisconnect:
+        # Clean up on disconnect
+        logger.info('WebSocket disconnecting - cleaning up resources')
+        audio_accumulator.reset_state()
         if user_id:
             manager.disconnect(user_id)
         logger.info('WebSocket disconnected')
     except Exception as e:
         logger.error(f'WebSocket error: {e}', exc_info=True)
+        # Clean up on error
+        audio_accumulator.reset_state()
         if user_id:
             manager.disconnect(user_id)
         try:
@@ -295,3 +298,7 @@ async def voice_stream(
             })
         except Exception:
             pass
+    finally:
+        # Final cleanup to ensure resources are released
+        logger.info('Final cleanup - resetting audio accumulator')
+        audio_accumulator.reset_state()

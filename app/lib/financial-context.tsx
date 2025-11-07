@@ -85,11 +85,9 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      console.log("🔄 Fetching transfers...");
       const response = await fetchWithAuth("/api/transfers");
       if (response.ok) {
         const data = await response.json();
-        console.log("✅ Transfers API response:", data);
         // Transform API response to match Transfer interface
         const transformedTransfers: Transfer[] = data.map((transfer: any) => ({
           id: transfer.id,
@@ -101,7 +99,6 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
           date: new Date(transfer.created_at),
           status: transfer.status,
         }));
-        console.log("✅ Transformed transfers:", transformedTransfers);
         setTransfers(transformedTransfers);
       } else if (response.status === 401) {
         console.warn("⚠️ Unauthorized - clearing transfers");

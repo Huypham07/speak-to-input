@@ -72,7 +72,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Store access_token in localStorage for WebSocket connection
       if (data.access_token) {
         localStorage.setItem("access_token", data.access_token);
-        console.log("✅ Access token saved to localStorage");
       }
 
       // Cookies are set by backend, just fetch user info

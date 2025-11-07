@@ -1,4 +1,4 @@
-FROM ubuntu:22.04
+FROM nvidia/cuda:12.2.0-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -19,7 +19,8 @@ WORKDIR /opt
 RUN git clone https://github.com/ggerganov/whisper.cpp.git
 WORKDIR /opt/whisper.cpp
 
-RUN mkdir build && cd build && cmake .. && make -j
+# RUN mkdir build && cd build && cmake .. && make -j
+RUN mkdir build && cd build && cmake -DWITH_CUBLAS=1 .. && make -j
 
 RUN mkdir -p models
 RUN bash ./models/download-ggml-model.sh medium

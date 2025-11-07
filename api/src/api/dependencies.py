@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from api.helpers.audio_stream_accumulator import AudioStreamAccumulator
 from application.services import IntentUnderstandingService
 from application.services import VoiceService
 from application.services.orchestration_service import OrchestrationService
@@ -220,4 +221,29 @@ def get_orchestration_service_ws(
         contact_repository=contact_repository,
         bill_repository=bill_repository,
         fund_repository=fund_repository,
+    )
+
+
+# ========== Audio Stream Accumulator ==========
+
+def get_audio_stream_accumulator(
+    settings: Settings = Depends(get_settings_ws),
+    voice_service: VoiceService = Depends(get_voice_service_ws),
+) -> AudioStreamAccumulator:
+    """
+    Create AudioStreamAccumulator instance for WebSocket voice streaming.
+
+    This accumulator handles concurrent audio chunk processing with:
+    - Safe buffer management
+    - Configurable segment duration and overlap
+    - Concurrent task processing with semaphore
+    """
+    return AudioStreamAccumulator(
+        settings=settings,
+        voice_service=voice_service,
+        target_seconds=10.0,  # Process every 10 seconds of audio
+        overlap_seconds=2.0,  # 2 seconds overlap for better continuity
+        max_overlap=10,  # Maximum overlap characters for merging
+        min_overlap=3,   # Minimum overlap characters for merging
+        max_concurrent_tasks=3,  # Limit concurrent transcription tasks
     )

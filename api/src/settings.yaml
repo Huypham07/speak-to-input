@@ -12,8 +12,10 @@ postgres:
 secret_key: sti-team-24
 
 whisper:
-  host: http://localhost
+  host:
   port: 8081
+  host2:
+  port2: 8082
 
 llm:
   provider: gemini # gemini or bedrock

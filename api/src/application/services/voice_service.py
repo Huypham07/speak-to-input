@@ -21,7 +21,9 @@ class VoiceService:
 
     def __init__(self, settings: Settings, llm_service: LLMService = None):
         self.settings = settings
-        self.server_url = f'{settings.whisper.host}:{settings.whisper.port}'
+        host = settings.whisper.host or settings.whisper.host2 or 'http://localhost'
+        port = settings.whisper.port or settings.whisper.port2 or 8080
+        self.server_url = f'{host}:{port}'
         self.llm_service = llm_service or LLMService(settings)
 
     async def load_model(self, model_path: str):
@@ -184,62 +186,3 @@ CHÚ Ý:
             logger.error(f'Error normalizing text with LLM: {e}', exc_info=True)
             # Fallback to basic normalization
             return text.lower().strip()
-
-    async def process(
-        self,
-        audio_bytes: bytes,
-    ) -> tuple[str, str]:
-        """
-        Process audio input.
-
-        Args:
-            audio_bytes: Audio data in bytes
-
-        Returns:
-            (original_text, normalized_text)
-        """
-        # Step 1: ASR
-        # asr_text = await self.speech_to_text(audio_bytes)
-
-        # TEST MODE: Random test sentences for different intents
-        import random
-
-        test_sentences = [
-            # Create Bill intent
-            'tạo hóa đơn tiền điện năm trăm nghìn hạn mười hai tháng hai',
-            'tạo bill tiền nước ba trăm nghìn hạn hai mươi tháng này',
-            'thêm hóa đơn tiền internet bốn trăm nghìn danh mục tiện ích',
-            'tạo hóa đơn tiền thuê nhà năm triệu hạn một tháng ba',
-            'bill bảo hiểm hai triệu hạn mười lăm tháng hai',
-
-            # Transfer intent
-            'chuyển tiền cho mẹ một triệu',
-            'chuyển năm trăm nghìn cho tài khoản 123456789',
-            'transfer hai triệu cho anh Tuấn tài khoản 987654321',
-            'gửi ba trăm nghìn cho chị Hoa',
-
-            # Create Fund intent
-            'tạo quỹ du lịch mười triệu',
-            'tạo quỹ khẩn cấp hai mươi triệu mục tiêu ba tháng sau',
-            'thêm quỹ tiết kiệm năm triệu hạn sáu tháng',
-            'tạo fund giáo dục mười lăm triệu',
-
-            # Deposit/Withdraw intent
-            'nạp tiền năm trăm nghìn',
-            'rút tiền một triệu',
-            'deposit ba trăm nghìn',
-            'withdraw hai triệu',
-
-            # Pay Bill intent
-            'thanh toán hóa đơn tiền điện',
-            'trả bill tiền nước',
-            'pay hóa đơn internet',
-        ]
-
-        asr_text = random.choice(test_sentences)
-        logger.info(f'🎲 TEST MODE - Random sentence: {asr_text}')
-
-        # Step 2: Normalize
-        normalized = await self.normalize_text(asr_text)
-
-        return asr_text, normalized

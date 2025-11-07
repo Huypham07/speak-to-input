@@ -84,7 +84,7 @@ class AudioStreamAccumulator:
         try:
             audio = AudioSegment.from_file(io.BytesIO(chunk_bytes), format='wav')
         except Exception as e:
-            logger.error(f"Failed to read audio chunk: {e}")
+            logger.error(f'Failed to read audio chunk: {e}')
             return
 
         async with self._lock:
@@ -131,9 +131,10 @@ class AudioStreamAccumulator:
             async with self._sem:
                 # call voice service (may raise)
                 if wav_bytes:
-                    text = await self.voice_service.process(audio_bytes=wav_bytes)
+                    text = await self.voice_service.speech_to_text(audio_bytes=wav_bytes)
                 else:
                     logger.error('Cảnh báo: Không thể xử lý chunk vì đối tượng là None.')
+                    text = ''
 
             # store result under lock to prevent races with other writes
             async with self._lock:

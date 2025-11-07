@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { useVoiceWebSocket } from "@/hooks/use-voice-websocket";
 import { useAuth } from "@/lib/auth-context";
 import { VoiceRecordingDialog } from "@/components/speech/voice-recording-dialog";
+import { cleanupMicrophoneResources, stopMediaStream } from "@/lib/microphone-utils";
+import { encodeWav, downsampleBuffer } from "@/lib/audio-utils";
 import { toast } from "sonner";
 
 interface SpeechContextType {
@@ -50,6 +52,9 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioStreamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const workletNodeRef = useRef<AudioWorkletNode | null>(null);
+  const audioBufferRef = useRef<Float32Array[]>([]);
 
   const {
     connect,
@@ -315,24 +320,44 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
         });
         audioStreamRef.current = stream;
 
-        const mediaRecorder = new MediaRecorder(stream, {
-          mimeType: "audio/webm",
-        });
-        mediaRecorderRef.current = mediaRecorder;
+        // Create AudioContext for processing raw audio
+        const audioContext = new AudioContext({ sampleRate: 16000 });
+        audioContextRef.current = audioContext;
 
-        // Send audio chunks as they become available
-        mediaRecorder.ondataavailable = (event) => {
-          if (event.data.size > 0) {
-            console.log("📤 Sending audio chunk, size:", event.data.size);
-            event.data.arrayBuffer().then((arrayBuffer) => {
-              sendAudioChunk(arrayBuffer);
-            });
+        // Load AudioWorklet module
+        await audioContext.audioWorklet.addModule("/recorder-worklet.js");
+
+        const source = audioContext.createMediaStreamSource(stream);
+
+        // Create AudioWorkletNode
+        const workletNode = new AudioWorkletNode(audioContext, "recorder-worklet");
+        workletNodeRef.current = workletNode;
+
+        // Accumulate audio chunks
+        audioBufferRef.current = [];
+        let lastSendTime = Date.now();
+        const SEND_INTERVAL = 5000; // Send every 5 seconds
+
+        // Listen to messages from the worklet
+        workletNode.port.onmessage = (event) => {
+          if (event.data.type === "audio-data") {
+            const chunk = event.data.data as Float32Array;
+            audioBufferRef.current.push(chunk);
+
+            // Send accumulated chunks every 5 seconds
+            const now = Date.now();
+            if (now - lastSendTime >= SEND_INTERVAL) {
+              sendAccumulatedAudio();
+              lastSendTime = now;
+            }
           }
         };
 
-        // Send chunks every 5 seconds (or remaining if < 5s)
-        mediaRecorder.start(5000); // 5 second chunks
-        console.log("🎙️ Recording started! Sending chunks every 5 seconds");
+        // Connect the audio graph
+        source.connect(workletNode);
+        // Note: We don't connect to destination to avoid echo
+
+        console.log("🎙️ Recording started! Capturing raw PCM audio via AudioWorklet");
         setIsListening(true);
         setIsRecordingDialogOpen(true); // Show dialog
       } catch (err) {
@@ -345,41 +370,65 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
     [connect, disconnect, isReady, sendAudioChunk, isListening, isConnected]
   );
 
-  const stopListening = useCallback(async () => {
-    if (!mediaRecorderRef.current) return;
+  // Helper function to send accumulated audio
+  const sendAccumulatedAudio = useCallback(() => {
+    if (audioBufferRef.current.length === 0) return;
 
+    // Merge all chunks into single Float32Array
+    const totalLength = audioBufferRef.current.reduce((sum, chunk) => sum + chunk.length, 0);
+    const merged = new Float32Array(totalLength);
+    let offset = 0;
+    for (const chunk of audioBufferRef.current) {
+      merged.set(chunk, offset);
+      offset += chunk.length;
+    }
+
+    // Encode to WAV
+    const wavBuffer = encodeWav(merged, 16000);
+
+    console.log(
+      `📤 Sending WAV chunk: ${audioBufferRef.current.length} buffers, ${totalLength} samples, ${wavBuffer.byteLength} bytes`
+    );
+
+    // Send to backend
+    sendAudioChunk(wavBuffer);
+
+    // Clear buffer
+    audioBufferRef.current = [];
+  }, [sendAudioChunk]);
+
+  const stopListening = useCallback(async () => {
     console.log("⏹️ Stopping recording...");
     setIsProcessing(true);
 
     try {
-      const mediaRecorder = mediaRecorderRef.current;
+      // Send any remaining audio
+      sendAccumulatedAudio();
 
-      // Wait for MediaRecorder to finish and all chunks to be sent
-      await new Promise<void>((resolve) => {
-        // This event fires AFTER all ondataavailable events are done
-        mediaRecorder.onstop = () => {
-          console.log("🎬 MediaRecorder stopped, all chunks sent");
-          resolve();
-        };
+      // Stop audio processing
+      if (workletNodeRef.current) {
+        workletNodeRef.current.disconnect();
+        workletNodeRef.current.port.onmessage = null;
+        workletNodeRef.current = null;
+      }
 
-        // Stop recording - this will trigger final ondataavailable, then onstop
-        mediaRecorder.stop();
-      });
+      if (audioContextRef.current) {
+        await audioContextRef.current.close();
+        audioContextRef.current = null;
+      }
 
-      // Add small delay to ensure the last chunk's arrayBuffer promise completes
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      // NOW notify backend that recording stopped - all chunks have been sent
+      // Notify backend that recording stopped
       stopRecording();
 
       setIsListening(false);
       setIsRecordingDialogOpen(false); // Close dialog
 
-      // Stop all tracks
-      if (audioStreamRef.current) {
-        audioStreamRef.current.getTracks().forEach((track: MediaStreamTrack) => track.stop());
-        audioStreamRef.current = null;
-      }
+      // Stop all tracks using utility function
+      stopMediaStream(audioStreamRef.current, "stopListening");
+      audioStreamRef.current = null;
+
+      // Clear buffer
+      audioBufferRef.current = [];
 
       // DON'T close WebSocket yet - wait for backend response
       // disconnect() will be called after receiving intent_extracted or execution_success
@@ -388,10 +437,24 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
     } catch (err) {
       console.error("Error stopping recording:", err);
       setError("Failed to stop recording");
+
+      // Cleanup on error
+      if (workletNodeRef.current) {
+        workletNodeRef.current.disconnect();
+        workletNodeRef.current = null;
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+        audioContextRef.current = null;
+      }
+      stopMediaStream(audioStreamRef.current, "stopListening-error");
+      audioStreamRef.current = null;
+      audioBufferRef.current = [];
+
       disconnect(); // Only disconnect on error
     }
     // Don't set isProcessing to false here - will be set when response arrives
-  }, [stopRecording, disconnect]);
+  }, [stopRecording, disconnect, sendAccumulatedAudio]);
 
   const cancelRecording = useCallback(() => {
     console.log("❌ Cancelling recording...");
@@ -399,16 +462,24 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
     // Send cancel message to backend
     wsCancelRecording();
 
-    // Stop recording without saving
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-      mediaRecorderRef.current.stop();
+    // Stop audio processing
+    if (workletNodeRef.current) {
+      workletNodeRef.current.disconnect();
+      workletNodeRef.current.port.onmessage = null;
+      workletNodeRef.current = null;
     }
 
-    // Stop all tracks
-    if (audioStreamRef.current) {
-      audioStreamRef.current.getTracks().forEach((track: MediaStreamTrack) => track.stop());
-      audioStreamRef.current = null;
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
     }
+
+    // Stop media stream
+    stopMediaStream(audioStreamRef.current, "cancelRecording");
+    audioStreamRef.current = null;
+
+    // Clear buffer
+    audioBufferRef.current = [];
 
     // Disconnect WebSocket
     disconnect();
@@ -462,16 +533,32 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
   // Cleanup on unmount only
   useEffect(() => {
     return () => {
-      // Only cleanup when component unmounts
-      if (mediaRecorderRef.current) {
-        mediaRecorderRef.current.stop();
+      console.log("🧹 SpeechContext unmounting - cleaning up resources");
+
+      // Stop audio processing
+      if (workletNodeRef.current) {
+        workletNodeRef.current.disconnect();
+        workletNodeRef.current = null;
       }
-      if (audioStreamRef.current) {
-        audioStreamRef.current.getTracks().forEach((track) => track.stop());
+
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+        audioContextRef.current = null;
       }
+
+      // Stop media stream
+      stopMediaStream(audioStreamRef.current, "unmount");
+      audioStreamRef.current = null;
+
+      // Clear buffer
+      audioBufferRef.current = [];
+
+      // Disconnect WebSocket
       disconnect();
+
+      console.log("✅ SpeechContext cleanup complete");
     };
-  }, []); // Empty deps - only run on mount/unmount
+  }, [disconnect]);
 
   return (
     <SpeechContext.Provider

@@ -18,6 +18,7 @@ export function VoiceRecordingDialog({ open, onClose, onStop, isProcessing = fal
   const audioContextRef = useRef<AudioContext | undefined>(undefined);
   const analyserRef = useRef<AnalyserNode | undefined>(undefined);
   const dataArrayRef = useRef<Uint8Array | undefined>(undefined);
+  const streamRef = useRef<MediaStream | undefined>(undefined); // 🔥 Lưu stream để cleanup
 
   useEffect(() => {
     if (!open) return;
@@ -26,6 +27,7 @@ export function VoiceRecordingDialog({ open, onClose, onStop, isProcessing = fal
     const setupAudioVisualization = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        streamRef.current = stream; // 🔥 Lưu stream reference
 
         audioContextRef.current = new AudioContext();
         analyserRef.current = audioContextRef.current.createAnalyser();
@@ -49,8 +51,17 @@ export function VoiceRecordingDialog({ open, onClose, onStop, isProcessing = fal
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
+
       if (audioContextRef.current) {
         audioContextRef.current.close();
+      }
+
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => {
+          track.stop();
+          console.log("🎤 Stopped microphone track:", track.label);
+        });
+        streamRef.current = undefined;
       }
     };
   }, [open]);
