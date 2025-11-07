@@ -112,7 +112,9 @@ function AccountsPageContent() {
     // Switch to transfer tab and pass account info via URL params
     setActiveTab("transfer");
     router.push(
-      `/accounts?action=transfer&accountNumber=${encodeURIComponent(account.account_number)}&recipientName=${encodeURIComponent(account.user_full_name)}`,
+      `/accounts?action=transfer&accountNumber=${encodeURIComponent(
+        account.account_number
+      )}&recipientName=${encodeURIComponent(account.user_full_name)}`,
       { scroll: false }
     );
   };
@@ -217,63 +219,65 @@ function AccountsPageContent() {
                 </div>
               )}
 
-              {/* Other Users Accounts List */}
-              {otherAccounts.length > 0 && (
-                <div className="mt-8 space-y-4">
-                  <h2 className="text-xl font-semibold flex items-center gap-2">
-                    <Users className="h-5 w-5" />
-                    Tài khoản người dùng khác
+              {/* Other Users Accounts List - Only show in Transfer tab */}
+              {otherAccounts.length > 0 && activeTab === "transfer" && (
+                <div className="mt-8 space-y-3">
+                  <h2 className="text-lg font-semibold flex items-center gap-2">
+                    <Users className="h-4 w-4" />
+                    Chuyển nhanh đến
                   </h2>
-                  <div className="space-y-3">
-                    {loadingOtherAccounts ? (
-                      <div className="space-y-3">
-                        {[1, 2].map((i) => (
-                          <Card key={i}>
-                            <CardContent className="pt-6">
-                              <Skeleton className="h-24 w-full" />
+
+                  {loadingOtherAccounts ? (
+                    <div className="flex gap-2 overflow-x-auto pb-2">
+                      {[1, 2, 3].map((i) => (
+                        <Skeleton key={i} className="h-20 min-w-[140px] shrink-0 rounded-lg" />
+                      ))}
+                    </div>
+                  ) : (
+                    <>
+                      {/* Mobile: Horizontal Scroll */}
+                      <div className="md:hidden flex gap-2 overflow-x-auto pb-2 -mx-4 px-4">
+                        {otherAccounts.map((account) => (
+                          <Card
+                            key={account.id}
+                            className="cursor-pointer transition-all hover:shadow-md border-muted shrink-0 min-w-[140px] py-2"
+                            onClick={() => handleSelectOtherAccount(account)}>
+                            <CardContent className="p-3 space-y-1.5">
+                              <div className="flex items-center gap-1.5">
+                                <Users className="h-3.5 w-3.5 text-muted-foreground" />
+                                <p className="font-semibold text-xs truncate flex-1">{account.user_full_name}</p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] text-muted-foreground">STK</p>
+                                <p className="text-[11px] font-mono">{account.account_number}</p>
+                              </div>
                             </CardContent>
                           </Card>
                         ))}
                       </div>
-                    ) : (
-                      otherAccounts.map((account) => (
-                        <Card
-                          key={account.id}
-                          className="cursor-pointer transition-all hover:shadow-md border-muted"
-                          onClick={() => handleSelectOtherAccount(account)}>
-                          <CardHeader>
-                            <div className="flex justify-between items-start">
-                              <div className="flex-1">
-                                <CardTitle className="flex items-center gap-2 text-base">
-                                  <Users className="h-4 w-4" />
-                                  {account.user_full_name}
-                                </CardTitle>
-                                <CardDescription className="mt-1">
-                                  @{account.user_username} • {account.account_name}
-                                </CardDescription>
-                                <CardDescription className="mt-1 text-xs">
-                                  STK: {account.account_number}
-                                </CardDescription>
+
+                      {/* Desktop: Grid - More columns to prevent text overflow */}
+                      <div className="hidden md:grid md:grid-cols-3 xl:grid-cols-4 gap-2">
+                        {otherAccounts.map((account) => (
+                          <Card
+                            key={account.id}
+                            className="cursor-pointer transition-all hover:shadow-md border-muted py-2"
+                            onClick={() => handleSelectOtherAccount(account)}>
+                            <CardContent className="p-3 space-y-1.5">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <Users className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                <p className="font-semibold text-xs truncate">{account.user_full_name}</p>
                               </div>
-                              <Badge variant={account.is_active ? "default" : "secondary"} className="text-xs">
-                                {account.is_active ? "Hoạt động" : "Tạm khóa"}
-                              </Badge>
-                            </div>
-                          </CardHeader>
-                          <CardContent>
-                            <div className="flex justify-between items-end">
-                              <div>
-                                <p className="text-sm text-muted-foreground">Số dư</p>
-                                <p className="text-xl font-bold">
-                                  {account.balance.toLocaleString("vi-VN")} {account.currency}
-                                </p>
+                              <div className="min-w-0">
+                                <p className="text-[10px] text-muted-foreground">STK</p>
+                                <p className="text-[11px] font-mono truncate">{account.account_number}</p>
                               </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))
-                    )}
-                  </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </div>
