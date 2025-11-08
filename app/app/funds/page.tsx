@@ -35,7 +35,6 @@ export default function FundsPage() {
     if (parameters.fund_name || parameters.target_amount) {
       setIsCreating(true);
     }
-
   }, [extractedIntent]);
 
   // Redirect to login if not authenticated

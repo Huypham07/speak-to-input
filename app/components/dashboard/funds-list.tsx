@@ -68,7 +68,13 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
   // Disambiguation dialog for multiple matching funds
   const [disambiguationDialog, setDisambiguationDialog] = useState<{
     open: boolean;
-    funds: Array<{ id: number; fund_name: string; current_amount: number; target_amount: number; category: string | null }>;
+    funds: Array<{
+      id: number;
+      fund_name: string;
+      current_amount: number;
+      target_amount: number;
+      category: string | null;
+    }>;
     action: "deposit" | "withdraw" | "delete" | null;
     amount?: number;
   }>({
@@ -195,7 +201,7 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
   };
 
   // Handle fund selection from disambiguation dialog
-  const handleFundSelection = (fund: typeof disambiguationDialog.funds[0]) => {
+  const handleFundSelection = (fund: (typeof disambiguationDialog.funds)[0]) => {
     try {
       const { action, amount } = disambiguationDialog;
 
@@ -763,7 +769,9 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
       </AlertDialog>
 
       {/* Disambiguation Dialog - When multiple funds have the same name */}
-      <AlertDialog open={disambiguationDialog.open} onOpenChange={(open) => !open && setDisambiguationDialog({ open: false, funds: [], action: null })}>
+      <AlertDialog
+        open={disambiguationDialog.open}
+        onOpenChange={(open) => !open && setDisambiguationDialog({ open: false, funds: [], action: null })}>
         <AlertDialogContent className="max-w-2xl">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
@@ -771,7 +779,13 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
               Chọn quỹ
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Tìm thấy nhiều quỹ có cùng tên. Vui lòng chọn quỹ bạn muốn {disambiguationDialog.action === "deposit" ? "nạp tiền vào" : disambiguationDialog.action === "withdraw" ? "rút tiền từ" : "xóa"}:
+              Tìm thấy nhiều quỹ có cùng tên. Vui lòng chọn quỹ bạn muốn{" "}
+              {disambiguationDialog.action === "deposit"
+                ? "nạp tiền vào"
+                : disambiguationDialog.action === "withdraw"
+                ? "rút tiền từ"
+                : "xóa"}
+              :
             </AlertDialogDescription>
           </AlertDialogHeader>
 
@@ -780,8 +794,7 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
               <button
                 key={fund.id}
                 onClick={() => handleFundSelection(fund)}
-                className="w-full p-4 rounded-lg border border-border hover:border-primary hover:bg-accent transition-all text-left group"
-              >
+                className="w-full p-4 rounded-lg border border-border hover:border-primary hover:bg-accent transition-all text-left group">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
@@ -796,7 +809,10 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
                     </div>
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
                       <span>
-                        Số dư: <span className="font-medium text-foreground">{fund.current_amount.toLocaleString("vi-VN")} VND</span>
+                        Số dư:{" "}
+                        <span className="font-medium text-foreground">
+                          {fund.current_amount.toLocaleString("vi-VN")} VND
+                        </span>
                       </span>
                       <span>•</span>
                       <span>

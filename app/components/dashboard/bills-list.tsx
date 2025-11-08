@@ -152,7 +152,7 @@ export function BillsList({ onCreateBill }: BillsListProps) {
   };
 
   // Handle bill selection from disambiguation dialog
-  const handleBillSelection = (bill: typeof disambiguationDialog.bills[0]) => {
+  const handleBillSelection = (bill: (typeof disambiguationDialog.bills)[0]) => {
     try {
       // Close disambiguation dialog
       setDisambiguationDialog({ open: false, bills: [] });
@@ -333,7 +333,9 @@ export function BillsList({ onCreateBill }: BillsListProps) {
       </AlertDialog>
 
       {/* Disambiguation Dialog - When multiple bills have the same name */}
-      <AlertDialog open={disambiguationDialog.open} onOpenChange={(open) => !open && setDisambiguationDialog({ open: false, bills: [] })}>
+      <AlertDialog
+        open={disambiguationDialog.open}
+        onOpenChange={(open) => !open && setDisambiguationDialog({ open: false, bills: [] })}>
         <AlertDialogContent className="max-w-2xl">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
@@ -351,8 +353,7 @@ export function BillsList({ onCreateBill }: BillsListProps) {
                 key={bill.id}
                 onClick={() => handleBillSelection(bill)}
                 disabled={bill.status === "paid"}
-                className="w-full p-4 rounded-lg border border-border hover:border-primary hover:bg-accent transition-all text-left group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-border disabled:hover:bg-transparent"
-              >
+                className="w-full p-4 rounded-lg border border-border hover:border-primary hover:bg-accent transition-all text-left group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-border disabled:hover:bg-transparent">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
@@ -377,11 +378,17 @@ export function BillsList({ onCreateBill }: BillsListProps) {
                     </div>
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
                       <span>
-                        Số tiền: <span className="font-medium text-foreground">{bill.amount.toLocaleString("vi-VN")} VND</span>
+                        Số tiền:{" "}
+                        <span className="font-medium text-foreground">{bill.amount.toLocaleString("vi-VN")} VND</span>
                       </span>
                       <span>•</span>
                       <span>
-                        Hạn: <span className="font-medium">{bill.dueDate instanceof Date ? bill.dueDate.toLocaleDateString("vi-VN") : new Date(bill.dueDate).toLocaleDateString("vi-VN")}</span>
+                        Hạn:{" "}
+                        <span className="font-medium">
+                          {bill.dueDate instanceof Date
+                            ? bill.dueDate.toLocaleDateString("vi-VN")
+                            : new Date(bill.dueDate).toLocaleDateString("vi-VN")}
+                        </span>
                       </span>
                     </div>
                   </div>

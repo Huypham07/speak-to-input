@@ -36,7 +36,6 @@ export default function BillsPage() {
     if (parameters.bill_name || parameters.amount) {
       setIsCreating(true);
     }
-
   }, [extractedIntent]);
 
   // Redirect to login if not authenticated
