@@ -45,7 +45,25 @@ class PayBillPlugin(IntentPlugin):
 
     def get_parameter_schema(self) -> Dict[str, Any]:
         """Return parameter schema for PAY_BILL intent"""
-        return PayBillValidation.model_json_schema()
+        return {
+            'type': 'object',
+            'properties': {
+                'bill_id': {
+                    'type': 'integer',
+                    'description': 'Bill ID to pay',
+                    'minimum': 1,
+                },
+                'bill_name': {
+                    'type': 'string',
+                    'description': 'Bill name to pay (alternative to bill_id)',
+                },
+                'from_account_id': {
+                    'type': 'integer',
+                    'description': 'Account to pay from (optional)',
+                    'minimum': 1,
+                },
+            },
+        }
 
     # ========== Execute ==========
 
@@ -67,7 +85,15 @@ class PayBillPlugin(IntentPlugin):
 
         # ========== Validate Parameters ==========
         bill_id = parameters.get('bill_id')
+        bill_name = parameters.get('bill_name')
         from_account_id = parameters.get('from_account_id')
+
+        if not bill_id and not bill_name:
+            return ExecutionResult(
+                success=False,
+                message='Vui lòng cung cấp ID hoặc tên hóa đơn cần thanh toán',
+                data={},
+            )
 
         # ========== Get Dependencies ==========
         user_id = context.get('user_id')
@@ -88,13 +114,35 @@ class PayBillPlugin(IntentPlugin):
         assert account_repo is not None
         assert user_id is not None
 
-        # ========== Validate Bill ==========
-        bill = await bill_repo.read_by_id(bill_id)
+        # ========== Find Bill by ID or Name ==========
+        bill = None
+
+        if bill_id:
+            # Find by ID
+            bill = await bill_repo.read_by_id(bill_id)
+        elif bill_name:
+            # Find by name (get all user's bills and match by name)
+            user_bills = await bill_repo.get_by_user_id(user_id)
+            matching_bills = [b for b in user_bills if b.bill_name.lower() == bill_name.lower()]
+
+            if len(matching_bills) == 0:
+                return ExecutionResult(
+                    success=False,
+                    message=f'Không tìm thấy hóa đơn với tên "{bill_name}"',
+                    data={},
+                )
+            elif len(matching_bills) > 1:
+                return ExecutionResult(
+                    success=False,
+                    message=f'Tìm thấy nhiều hóa đơn trùng tên "{bill_name}". Vui lòng chỉ định rõ hơn hoặc dùng ID.',
+                    data={'matching_count': len(matching_bills)},
+                )
+            bill = matching_bills[0]
 
         if not bill:
             return ExecutionResult(
                 success=False,
-                message=f'Không tìm thấy hóa đơn ID {bill_id}',
+                message='Không tìm thấy hóa đơn',
                 data={},
             )
 

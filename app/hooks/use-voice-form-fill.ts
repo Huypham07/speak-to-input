@@ -36,14 +36,11 @@ export function useVoiceFormFill<T extends Record<string, any>>(
       return;
     }
 
-    console.log("📝 Auto-filling form with voice parameters:", extractedIntent.parameters);
-
     // Fill form fields based on mapping
     Object.entries(fieldMapping).forEach(([voiceParam, formField]) => {
       const value = extractedIntent.parameters[voiceParam];
 
       if (value !== undefined && value !== null) {
-        console.log(`  Setting ${String(formField)} = ${value}`);
         // Type assertion to handle generic Path type
         form.setValue(formField as any, value as any, {
           shouldValidate: true,

@@ -6,7 +6,8 @@ import { LogOut, Home, Send, FileText, PiggyBank, Mic, Square, Settings, User, W
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSpeech } from "@/lib/speech-context";
-import { useFormContext } from "@/lib/form-context";
+import { useFormStore } from "@/lib/stores/form-store";
+import { useAppStore } from "@/lib/stores/app-store";
 import { useSidebar } from "@/lib/sidebar-context";
 import {
   DropdownMenu,
@@ -21,8 +22,13 @@ export function Navbar() {
   const { user, logout } = useAuth();
   const pathname = usePathname();
   const { isListening, isProcessing, startListening, stopListening, isConnected } = useSpeech();
-  const { currentForm } = useFormContext();
   const { isCollapsed, toggleSidebar } = useSidebar();
+
+  // Zustand stores
+  const formData = useFormStore((state) => state.data);
+  const formType = useFormStore((state) => state.type);
+  const isDialogOpen = useAppStore((state) => state.currentDialog.isOpen);
+  const isRecording = useAppStore((state) => state.isRecording);
 
   if (!user) return null;
 
@@ -35,25 +41,15 @@ export function Navbar() {
 
   const isActive = (href: string) => {
     // Remove query string from href for comparison
-    const hrefPath = href.split('?')[0];
+    const hrefPath = href.split("?")[0];
     return pathname === hrefPath || pathname.startsWith(hrefPath);
   };
 
   const handleSpeechClick = async () => {
-    console.log("🎤 Speech button clicked");
-    console.log("Current form:", currentForm);
-    console.log("Form type:", currentForm.type);
-    console.log("Form data keys:", Object.keys(currentForm.data));
-    console.log("Is listening:", isListening);
-    console.log("Is connected:", isConnected);
-    console.log("All cookies:", document.cookie);
-
     if (isListening) {
-      console.log("Stopping listening...");
       await stopListening();
     } else {
-      console.log("Starting listening with form data:", currentForm.data, "intent:", currentForm.type);
-      await startListening(currentForm.data, currentForm.type ?? undefined);
+      await startListening(formData, formType ?? undefined);
     }
   };
 
@@ -153,7 +149,7 @@ export function Navbar() {
       <button
         onClick={handleSpeechClick}
         disabled={isProcessing}
-        className="hidden md:flex fixed bottom-6 right-6 z-50 items-center justify-center w-16 h-16 rounded-full bg-linear-to-r from-orange-500 to-pink-500 text-white shadow-2xl hover:shadow-[0_10px_40px_rgba(251,113,133,0.4)] transition-all hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed">
+        className="hidden md:flex fixed bottom-6 right-6 z-100 items-center justify-center w-16 h-16 rounded-full bg-linear-to-r from-orange-500 to-pink-500 text-white shadow-2xl hover:shadow-[0_10px_40px_rgba(251,113,133,0.4)] transition-all hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed">
         {isListening ? (
           <>
             <Square className="h-7 w-7" />
@@ -165,7 +161,7 @@ export function Navbar() {
       </button>
 
       {/* Mobile Bottom Navigation with Convex Speech Button */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t-2 border-border/70 bg-linear-to-t from-slate-50 to-white dark:from-slate-900 dark:to-slate-950 backdrop-blur supports-backdrop-filter:bg-background/80 shadow-[0_-8px_24px_rgba(0,0,0,0.15)] dark:shadow-[0_-8px_24px_rgba(0,0,0,0.5)]">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-100 border-t-2 border-border/70 bg-linear-to-t from-slate-50 to-white dark:from-slate-900 dark:to-slate-950 backdrop-blur supports-backdrop-filter:bg-background/80 shadow-[0_-8px_24px_rgba(0,0,0,0.15)] dark:shadow-[0_-8px_24px_rgba(0,0,0,0.5)]">
         <div className="relative">
           {/* Convex bump for speech button - centered between 5 items */}
           <div
@@ -196,7 +192,7 @@ export function Navbar() {
             ))}
 
             {/* Center - Speech Button */}
-            <div className="flex items-center justify-center">
+            <div className="flex items-center justify-center relative z-110">
               <button
                 onClick={handleSpeechClick}
                 disabled={isProcessing}

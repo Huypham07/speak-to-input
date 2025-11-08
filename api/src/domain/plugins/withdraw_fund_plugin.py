@@ -33,12 +33,16 @@ class WithdrawFundPlugin(IntentPlugin):
     def get_parameter_schema(self) -> Dict[str, Any]:
         return {
             'type': 'object',
-            'required': ['fund_id', 'amount'],
+            'required': ['amount'],
             'properties': {
                 'fund_id': {
                     'type': 'integer',
                     'description': 'Fund ID to withdraw from',
                     'minimum': 1,
+                },
+                'fund_name': {
+                    'type': 'string',
+                    'description': 'Fund name to withdraw from (alternative to fund_id)',
                 },
                 'amount': {
                     'type': 'number',
@@ -90,13 +94,45 @@ class WithdrawFundPlugin(IntentPlugin):
 
             # Validate and extract parameters
             fund_id = parameters.get('fund_id')
-            if not fund_id:
+            fund_name = parameters.get('fund_name')
+
+            if not fund_id and not fund_name:
                 return ExecutionResult(
                     success=False,
-                    message='Fund ID là bắt buộc',
+                    message='Vui lòng cung cấp ID hoặc tên quỹ cần rút tiền',
                     data={},
                 )
-            fund_id = int(fund_id)
+
+            # Find fund by ID or name
+            fund = None
+
+            if fund_id:
+                fund = await fund_repo.read_by_id(int(fund_id))
+            elif fund_name:
+                # Get all user's funds and match by name
+                user_funds = await fund_repo.get_by_user_id(user_id)
+                matching_funds = [f for f in user_funds if f.fund_name.lower() == fund_name.lower()]
+
+                if len(matching_funds) == 0:
+                    return ExecutionResult(
+                        success=False,
+                        message=f'Không tìm thấy quỹ với tên "{fund_name}"',
+                        data={},
+                    )
+                elif len(matching_funds) > 1:
+                    return ExecutionResult(
+                        success=False,
+                        message=f'Tìm thấy nhiều quỹ trùng tên "{fund_name}". Vui lòng chỉ định rõ hơn hoặc dùng ID.',
+                        data={'matching_count': len(matching_funds)},
+                    )
+                fund = matching_funds[0]
+
+            if not fund:
+                return ExecutionResult(
+                    success=False,
+                    message='Không tìm thấy quỹ tiết kiệm',
+                    data={},
+                )
 
             amount = parameters.get('amount')
             if not amount:
@@ -115,12 +151,11 @@ class WithdrawFundPlugin(IntentPlugin):
 
             to_account_id = parameters.get('to_account_id')
 
-            # Get fund
-            fund = await fund_repo.read_by_id(fund_id)
-            if not fund:
+            # Check ownership
+            if fund.user_id != int(user_id):
                 return ExecutionResult(
                     success=False,
-                    message='Quỹ tiết kiệm không tồn tại',
+                    message='Bạn không có quyền rút tiền từ quỹ này',
                     data={},
                 )
 

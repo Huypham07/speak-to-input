@@ -303,14 +303,11 @@ class SendMoneyPlugin(IntentPlugin):
         contact_repo,
         account_repo,
     ) -> Optional[Dict[str, Any]]:
-        """Resolve recipient from account number
+        """Resolve recipient from account number or contact name
 
         Returns:
         - For internal transfer: {'account_id': int, 'name': str}
         - For external transfer: {'account_number': str, 'name': str, 'bank': str}
-
-        Note: Contact repository is kept for future voice-input feature
-        where users can say contact names instead of account numbers.
         """
         # Try to find account by account number (internal transfer)
         account = await account_repo.get_by_account_number(recipient)
@@ -320,7 +317,56 @@ class SendMoneyPlugin(IntentPlugin):
                 'name': account.account_name,
             }
 
-        # Not found in internal accounts - assume external transfer
-        # For now, return None to indicate recipient not found
-        # TODO: For voice input, search in contacts by name
+        # Try to find by contact name
+        user_contacts = await contact_repo.get_by_user_id(user_id)
+
+        # Search by exact match (case-insensitive)
+        matching_contacts = [
+            c for c in user_contacts
+            if c.contact_name.lower() == recipient.lower()
+        ]
+
+        if len(matching_contacts) == 1:
+            contact = matching_contacts[0]
+            # Check if this contact has an internal account
+            contact_account = await account_repo.get_by_account_number(contact.account_number)
+            if contact_account:
+                return {
+                    'account_id': int(contact_account.id),
+                    'name': contact.contact_name,
+                }
+            else:
+                # External transfer
+                return {
+                    'account_number': contact.account_number,
+                    'name': contact.contact_name,
+                    'bank': contact.bank_name or 'Unknown',
+                }
+        elif len(matching_contacts) > 1:
+            # Multiple contacts with same name - return None to show error
+            return None
+
+        # Search by partial match in contact name
+        partial_matches = [
+            c for c in user_contacts
+            if recipient.lower() in c.contact_name.lower()
+        ]
+
+        if len(partial_matches) == 1:
+            contact = partial_matches[0]
+            contact_account = await account_repo.get_by_account_number(contact.account_number)
+            if contact_account:
+                return {
+                    'account_id': int(contact_account.id),
+                    'name': contact.contact_name,
+                }
+            else:
+                return {
+                    'account_number': contact.account_number,
+                    'name': contact.contact_name,
+                    'bank': contact.bank_name or 'Unknown',
+                }
+
+        # Not found - assume it might be external account number
+        # Return None to indicate recipient not found
         return None

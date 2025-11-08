@@ -5,8 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PiggyBank, Plus, Minus, Trash2, AlertTriangle, Loader2 } from "lucide-react";
-import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { useState, useEffect } from "react";
+import { FormDialog, FormDialogHeader, FormDialogTitle, FormDialogDescription } from "@/components/ui/form-dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,13 +21,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useSpeech } from "@/lib/speech-context";
 
 interface FundsListProps {
   onCreateFund?: () => void;
 }
 
 export function FundsList({ onCreateFund }: FundsListProps = {}) {
-  const { funds, isLoadingFunds, depositToFund, withdrawFromFund, deleteFund } = useFinancial();
+  const { funds, isLoadingFunds, depositToFund, withdrawFromFund, deleteFund, refreshFunds } = useFinancial();
+  const { extractedIntent, clearIntent } = useSpeech();
   const [depositDialog, setDepositDialog] = useState<{ open: boolean; fundId: number | null }>({
     open: false,
     fundId: null,
@@ -63,6 +65,128 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
     currentAmount: 0,
   });
 
+  // Disambiguation dialog for multiple matching funds
+  const [disambiguationDialog, setDisambiguationDialog] = useState<{
+    open: boolean;
+    funds: Array<{
+      id: number;
+      fund_name: string;
+      current_amount: number;
+      target_amount: number;
+      category: string | null;
+    }>;
+    action: "deposit" | "withdraw" | "delete" | null;
+    amount?: number;
+  }>({
+    open: false,
+    funds: [],
+    action: null,
+  });
+
+  // Handle voice intents for fund operations
+  useEffect(() => {
+    if (!extractedIntent || extractedIntent.intent_changed || !funds || funds.length === 0) return;
+
+    const { intent_type, parameters } = extractedIntent;
+
+    // Find all matching funds by ID or name
+    const findFunds = () => {
+      if (parameters.fund_id) {
+        const fund = funds.find((f) => f.id === parseInt(parameters.fund_id));
+        return fund ? [fund] : [];
+      } else if (parameters.fund_name) {
+        const name = parameters.fund_name.toLowerCase();
+        return funds.filter((f) => f.fund_name.toLowerCase() === name);
+      }
+      return [];
+    };
+
+    const matchingFunds = findFunds();
+
+    // Check for duplicate names
+    if (matchingFunds.length > 1) {
+      // Show disambiguation dialog to let user choose
+      // Use setTimeout to ensure overlay is closed and navigation is complete
+      setTimeout(() => {
+        setDisambiguationDialog({
+          open: true,
+          funds: matchingFunds,
+          action: intent_type === "deposit_fund" ? "deposit" : intent_type === "withdraw_fund" ? "withdraw" : "delete",
+          amount: parameters.amount,
+        });
+      }, 100); // Small delay to ensure UI is ready
+
+      clearIntent(); // Clear intent to prevent re-trigger
+      return;
+    }
+
+    const fund = matchingFunds[0];
+    if (!fund) {
+      // No matching fund found
+      if (parameters.fund_name) {
+        toast.error(`Không tìm thấy quỹ với tên "${parameters.fund_name}"`, {
+          duration: 4000,
+        });
+      }
+      clearIntent();
+      return;
+    }
+
+    if (intent_type === "deposit_fund" && parameters.amount) {
+      // Auto-open deposit dialog with fund and amount pre-filled
+      setSelectedFund({
+        id: fund.id,
+        current_amount: fund.current_amount,
+        target_amount: fund.target_amount,
+        fund_name: fund.fund_name,
+      });
+      setAmount(String(parameters.amount));
+      setDepositDialog({ open: true, fundId: fund.id });
+
+      // Show success toast when found and opening dialog
+      toast.success("Nạp vào quỹ", {
+        description: `Đã tìm thấy quỹ "${fund.fund_name}". Vui lòng xác nhận số tiền.`,
+        duration: 3000,
+      });
+
+      clearIntent(); // Clear intent after handling
+    } else if (intent_type === "withdraw_fund" && parameters.amount) {
+      // Auto-open withdraw dialog with fund and amount pre-filled
+      setSelectedFundForWithdraw({
+        id: fund.id,
+        current_amount: fund.current_amount,
+        target_amount: fund.target_amount,
+        fund_name: fund.fund_name,
+      });
+      setAmount(String(parameters.amount));
+      setWithdrawDialog({ open: true, fundId: fund.id });
+
+      // Show success toast when found and opening dialog
+      toast.success("Rút từ quỹ", {
+        description: `Đã tìm thấy quỹ "${fund.fund_name}". Vui lòng xác nhận số tiền.`,
+        duration: 3000,
+      });
+
+      clearIntent(); // Clear intent after handling
+    } else if (intent_type === "delete_fund") {
+      // Auto-open delete confirmation dialog
+      setDeleteConfirmDialog({
+        open: true,
+        fundId: fund.id,
+        fundName: fund.fund_name,
+        currentAmount: fund.current_amount,
+      });
+
+      // Show info toast when found and opening confirmation
+      toast.info("Xóa quỹ", {
+        description: `Đã tìm thấy quỹ "${fund.fund_name}". Vui lòng xác nhận xóa.`,
+        duration: 3000,
+      });
+
+      clearIntent(); // Clear intent after handling
+    }
+  }, [extractedIntent, funds, clearIntent]);
+
   const getCategoryLabel = (category: string | null) => {
     if (!category) return "Khác";
     const labels: Record<string, string> = {
@@ -74,6 +198,47 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
       other: "Khác",
     };
     return labels[category] || category;
+  };
+
+  // Handle fund selection from disambiguation dialog
+  const handleFundSelection = (fund: (typeof disambiguationDialog.funds)[0]) => {
+    try {
+      const { action, amount } = disambiguationDialog;
+
+      // Close disambiguation dialog
+      setDisambiguationDialog({ open: false, funds: [], action: null });
+
+      // Perform the action based on what was requested
+      if (action === "deposit" && amount) {
+        setSelectedFund({
+          id: fund.id,
+          current_amount: fund.current_amount,
+          target_amount: fund.target_amount,
+          fund_name: fund.fund_name,
+        });
+        setAmount(String(amount));
+        setDepositDialog({ open: true, fundId: fund.id });
+      } else if (action === "withdraw" && amount) {
+        setSelectedFundForWithdraw({
+          id: fund.id,
+          current_amount: fund.current_amount,
+          target_amount: fund.target_amount,
+          fund_name: fund.fund_name,
+        });
+        setAmount(String(amount));
+        setWithdrawDialog({ open: true, fundId: fund.id });
+      } else if (action === "delete") {
+        setDeleteConfirmDialog({
+          open: true,
+          fundId: fund.id,
+          fundName: fund.fund_name,
+          currentAmount: fund.current_amount,
+        });
+      }
+    } catch (error) {
+      console.error("Error in handleFundSelection:", error);
+      toast.error("Có lỗi xảy ra khi chọn quỹ. Vui lòng thử lại.");
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -210,18 +375,24 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
     setIsDeletingFund(true);
     try {
       await deleteFund(deleteConfirmDialog.fundId);
-      // Message từ backend đã bao gồm thông tin về việc trả tiền (nếu có)
-      // Hiển thị success message từ backend hoặc default message
+
+      // Đóng dialog trước
+      setDeleteConfirmDialog({ open: false, fundId: null, fundName: "", currentAmount: 0 });
+
+      // Hiển thị thông báo
       toast.success(
         deleteConfirmDialog.currentAmount > 0
-          ? `Đã xóa quỹ "${deleteConfirmDialog.fundName}". ${deleteConfirmDialog.currentAmount.toLocaleString("vi-VN")} VND đã được tự động trả về tài khoản chính.`
+          ? `Đã xóa quỹ "${deleteConfirmDialog.fundName}". ${deleteConfirmDialog.currentAmount.toLocaleString(
+              "vi-VN"
+            )} VND đã được tự động trả về tài khoản chính.`
           : `Đã xóa quỹ "${deleteConfirmDialog.fundName}" thành công`,
         {
           duration: 4000,
         }
       );
-      // Đóng dialog sau khi xóa thành công
-      setDeleteConfirmDialog({ open: false, fundId: null, fundName: "", currentAmount: 0 });
+
+      // Reload danh sách quỹ
+      await refreshFunds();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Xóa quỹ thất bại";
       toast.error(errorMessage, {
@@ -372,7 +543,7 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
       </Card>
 
       {/* Deposit Dialog */}
-      <Dialog
+      <FormDialog
         open={depositDialog.open}
         onOpenChange={(open) => {
           if (!open) {
@@ -380,73 +551,71 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
             setAmount("");
             setSelectedFund(null);
           }
-        }}>
-        <DialogContent className="max-w-2xl w-[95vw] sm:w-full rounded-xl sm:rounded-2xl">
-          <DialogHeader>
-            <DialogTitle>Nạp tiền vào quỹ</DialogTitle>
-            <DialogDescription>
-              {selectedFund && (
-                <span>
-                  Số dư hiện tại: {selectedFund.current_amount.toLocaleString("vi-VN")} VND / Mục tiêu:{" "}
-                  {selectedFund.target_amount.toLocaleString("vi-VN")} VND
-                  <br />
-                  Số tiền tối đa có thể nạp:{" "}
-                  {(selectedFund.target_amount - selectedFund.current_amount).toLocaleString("vi-VN")} VND
-                </span>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="deposit-amount">Số tiền (VND)</Label>
-              <Input
-                id="deposit-amount"
-                type="number"
-                placeholder="100000"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                min="1000"
-                step="1000"
-                max={selectedFund ? selectedFund.target_amount - selectedFund.current_amount : undefined}
-              />
-              {selectedFund && amount && !isNaN(parseFloat(amount)) && (
-                <p className="text-xs text-muted-foreground">
-                  Sau khi nạp: {(selectedFund.current_amount + parseFloat(amount)).toLocaleString("vi-VN")} VND /{" "}
-                  {selectedFund.target_amount.toLocaleString("vi-VN")} VND
-                  {selectedFund.current_amount + parseFloat(amount) > selectedFund.target_amount && (
-                    <span className="text-red-500 ml-2">(Vượt quá mục tiêu!)</span>
-                  )}
-                </p>
-              )}
-            </div>
-            <div className="flex gap-2 justify-end">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setDepositDialog({ open: false, fundId: null });
-                  setAmount("");
-                  setSelectedFund(null);
-                }}>
-                Hủy
-              </Button>
-              <Button
-                onClick={handleDeposit}
-                disabled={
-                  !amount ||
-                  isProcessing ||
-                  parseFloat(amount) <= 0 ||
-                  (selectedFund !== null &&
-                    selectedFund.current_amount + parseFloat(amount) > selectedFund.target_amount)
-                }>
-                {isProcessing ? "Đang xử lý..." : "Nạp tiền"}
-              </Button>
-            </div>
+        }}
+        className="max-w-2xl w-[95vw] sm:w-full rounded-xl sm:rounded-2xl">
+        <FormDialogHeader>
+          <FormDialogTitle>Nạp tiền vào quỹ</FormDialogTitle>
+          <FormDialogDescription>
+            {selectedFund && (
+              <span>
+                Số dư hiện tại: {selectedFund.current_amount.toLocaleString("vi-VN")} VND / Mục tiêu:{" "}
+                {selectedFund.target_amount.toLocaleString("vi-VN")} VND
+                <br />
+                Số tiền tối đa có thể nạp:{" "}
+                {(selectedFund.target_amount - selectedFund.current_amount).toLocaleString("vi-VN")} VND
+              </span>
+            )}
+          </FormDialogDescription>
+        </FormDialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="deposit-amount">Số tiền (VND)</Label>
+            <Input
+              id="deposit-amount"
+              type="number"
+              placeholder="100000"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              min="1000"
+              step="1000"
+              max={selectedFund ? selectedFund.target_amount - selectedFund.current_amount : undefined}
+            />
+            {selectedFund && amount && !isNaN(parseFloat(amount)) && (
+              <p className="text-xs text-muted-foreground">
+                Sau khi nạp: {(selectedFund.current_amount + parseFloat(amount)).toLocaleString("vi-VN")} VND /{" "}
+                {selectedFund.target_amount.toLocaleString("vi-VN")} VND
+                {selectedFund.current_amount + parseFloat(amount) > selectedFund.target_amount && (
+                  <span className="text-red-500 ml-2">(Vượt quá mục tiêu!)</span>
+                )}
+              </p>
+            )}
           </div>
-        </DialogContent>
-      </Dialog>
+          <div className="flex gap-2 justify-end">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDepositDialog({ open: false, fundId: null });
+                setAmount("");
+                setSelectedFund(null);
+              }}>
+              Hủy
+            </Button>
+            <Button
+              onClick={handleDeposit}
+              disabled={
+                !amount ||
+                isProcessing ||
+                parseFloat(amount) <= 0 ||
+                (selectedFund !== null && selectedFund.current_amount + parseFloat(amount) > selectedFund.target_amount)
+              }>
+              {isProcessing ? "Đang xử lý..." : "Nạp tiền"}
+            </Button>
+          </div>
+        </div>
+      </FormDialog>
 
       {/* Withdraw Dialog */}
-      <Dialog
+      <FormDialog
         open={withdrawDialog.open}
         onOpenChange={(open) => {
           if (!open) {
@@ -455,67 +624,64 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
             setSelectedFundForWithdraw(null);
           }
         }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Rút tiền từ quỹ</DialogTitle>
-            <DialogDescription>
-              {selectedFundForWithdraw && (
-                <span>
-                  Số tiền hiện có: {selectedFundForWithdraw.current_amount.toLocaleString("vi-VN")} VND
-                  <br />
-                  Số tiền tối đa có thể rút: {selectedFundForWithdraw.current_amount.toLocaleString("vi-VN")} VND
-                </span>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="withdraw-amount">Số tiền (VND)</Label>
-              <Input
-                id="withdraw-amount"
-                type="number"
-                placeholder="100000"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                min="1000"
-                step="1000"
-                max={selectedFundForWithdraw ? selectedFundForWithdraw.current_amount : undefined}
-              />
-              {selectedFundForWithdraw && amount && !isNaN(parseFloat(amount)) && (
-                <p className="text-xs text-muted-foreground">
-                  Sau khi rút: {(selectedFundForWithdraw.current_amount - parseFloat(amount)).toLocaleString("vi-VN")}{" "}
-                  VND
-                  {parseFloat(amount) > selectedFundForWithdraw.current_amount && (
-                    <span className="text-red-500 ml-2">(Vượt quá số tiền hiện có!)</span>
-                  )}
-                </p>
-              )}
-            </div>
-            <div className="flex gap-2 justify-end">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setWithdrawDialog({ open: false, fundId: null });
-                  setAmount("");
-                  setSelectedFundForWithdraw(null);
-                }}
-                disabled={isProcessing}>
-                Hủy
-              </Button>
-              <Button
-                onClick={handleWithdraw}
-                disabled={
-                  !amount ||
-                  isProcessing ||
-                  parseFloat(amount) <= 0 ||
-                  (selectedFundForWithdraw !== null && parseFloat(amount) > selectedFundForWithdraw.current_amount)
-                }>
-                {isProcessing ? "Đang xử lý..." : "Rút tiền"}
-              </Button>
-            </div>
+        <FormDialogHeader>
+          <FormDialogTitle>Rút tiền từ quỹ</FormDialogTitle>
+          <FormDialogDescription>
+            {selectedFundForWithdraw && (
+              <span>
+                Số tiền hiện có: {selectedFundForWithdraw.current_amount.toLocaleString("vi-VN")} VND
+                <br />
+                Số tiền tối đa có thể rút: {selectedFundForWithdraw.current_amount.toLocaleString("vi-VN")} VND
+              </span>
+            )}
+          </FormDialogDescription>
+        </FormDialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="withdraw-amount">Số tiền (VND)</Label>
+            <Input
+              id="withdraw-amount"
+              type="number"
+              placeholder="100000"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              min="1000"
+              step="1000"
+              max={selectedFundForWithdraw ? selectedFundForWithdraw.current_amount : undefined}
+            />
+            {selectedFundForWithdraw && amount && !isNaN(parseFloat(amount)) && (
+              <p className="text-xs text-muted-foreground">
+                Sau khi rút: {(selectedFundForWithdraw.current_amount - parseFloat(amount)).toLocaleString("vi-VN")} VND
+                {parseFloat(amount) > selectedFundForWithdraw.current_amount && (
+                  <span className="text-red-500 ml-2">(Vượt quá số tiền hiện có!)</span>
+                )}
+              </p>
+            )}
           </div>
-        </DialogContent>
-      </Dialog>
+          <div className="flex gap-2 justify-end">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setWithdrawDialog({ open: false, fundId: null });
+                setAmount("");
+                setSelectedFundForWithdraw(null);
+              }}
+              disabled={isProcessing}>
+              Hủy
+            </Button>
+            <Button
+              onClick={handleWithdraw}
+              disabled={
+                !amount ||
+                isProcessing ||
+                parseFloat(amount) <= 0 ||
+                (selectedFundForWithdraw !== null && parseFloat(amount) > selectedFundForWithdraw.current_amount)
+              }>
+              {isProcessing ? "Đang xử lý..." : "Rút tiền"}
+            </Button>
+          </div>
+        </div>
+      </FormDialog>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog
@@ -536,9 +702,7 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
               <AlertDialogTitle className="text-xl font-semibold text-foreground mb-1">
                 Xác nhận xóa quỹ
               </AlertDialogTitle>
-              <p className="text-sm text-muted-foreground">
-                Hành động này không thể hoàn tác
-              </p>
+              <p className="text-sm text-muted-foreground">Hành động này không thể hoàn tác</p>
             </div>
           </div>
 
@@ -553,12 +717,13 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
               <div className="flex items-start gap-3 p-4 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 shadow-sm">
                 <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-amber-900 dark:text-amber-100 mb-1.5">
-                    Quỹ này còn tiền
-                  </p>
+                  <p className="text-sm font-semibold text-amber-900 dark:text-amber-100 mb-1.5">Quỹ này còn tiền</p>
                   <p className="text-sm text-amber-800 dark:text-amber-200 leading-relaxed">
-                    Quỹ còn <span className="font-semibold">{deleteConfirmDialog.currentAmount.toLocaleString("vi-VN")} VND</span>.
-                    Số tiền này sẽ được tự động trả về tài khoản chính khi xóa quỹ.
+                    Quỹ còn{" "}
+                    <span className="font-semibold">
+                      {deleteConfirmDialog.currentAmount.toLocaleString("vi-VN")} VND
+                    </span>
+                    . Số tiền này sẽ được tự động trả về tài khoản chính khi xóa quỹ.
                   </p>
                 </div>
               </div>
@@ -567,9 +732,7 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
             {deleteConfirmDialog.currentAmount === 0 && (
               <div className="flex items-center gap-2.5 p-3.5 rounded-lg bg-muted/50 dark:bg-muted/30 border border-border">
                 <PiggyBank className="h-4 w-4 text-muted-foreground shrink-0" />
-                <p className="text-sm text-muted-foreground">
-                  Quỹ này đang trống, có thể xóa an toàn.
-                </p>
+                <p className="text-sm text-muted-foreground">Quỹ này đang trống, có thể xóa an toàn.</p>
               </div>
             )}
           </div>
@@ -601,6 +764,84 @@ export function FundsList({ onCreateFund }: FundsListProps = {}) {
                 </>
               )}
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Disambiguation Dialog - When multiple funds have the same name */}
+      <AlertDialog
+        open={disambiguationDialog.open}
+        onOpenChange={(open) => !open && setDisambiguationDialog({ open: false, funds: [], action: null })}>
+        <AlertDialogContent className="max-w-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <PiggyBank className="h-5 w-5 text-primary" />
+              Chọn quỹ
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Tìm thấy nhiều quỹ có cùng tên. Vui lòng chọn quỹ bạn muốn{" "}
+              {disambiguationDialog.action === "deposit"
+                ? "nạp tiền vào"
+                : disambiguationDialog.action === "withdraw"
+                ? "rút tiền từ"
+                : "xóa"}
+              :
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="space-y-2 max-h-[400px] overflow-y-auto">
+            {disambiguationDialog.funds.map((fund) => (
+              <button
+                key={fund.id}
+                onClick={() => handleFundSelection(fund)}
+                className="w-full p-4 rounded-lg border border-border hover:border-primary hover:bg-accent transition-all text-left group">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h4 className="font-semibold text-base group-hover:text-primary transition-colors">
+                        {fund.fund_name}
+                      </h4>
+                      {fund.category && (
+                        <Badge variant="outline" className="text-xs">
+                          {getCategoryLabel(fund.category)}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <span>
+                        Số dư:{" "}
+                        <span className="font-medium text-foreground">
+                          {fund.current_amount.toLocaleString("vi-VN")} VND
+                        </span>
+                      </span>
+                      <span>•</span>
+                      <span>
+                        Mục tiêu: <span className="font-medium">{fund.target_amount.toLocaleString("vi-VN")} VND</span>
+                      </span>
+                    </div>
+                    <div className="mt-2">
+                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-primary transition-all"
+                          style={{
+                            width: `${Math.min((fund.current_amount / fund.target_amount) * 100, 100)}%`,
+                          }}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {((fund.current_amount / fund.target_amount) * 100).toFixed(1)}% hoàn thành
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDisambiguationDialog({ open: false, funds: [], action: null })}>
+              Hủy
+            </AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
