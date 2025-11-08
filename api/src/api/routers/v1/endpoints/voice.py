@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import asyncio
-import datetime
 import json
-import os
 from typing import Any
 from typing import Dict
 
@@ -33,12 +30,12 @@ class VoiceConnectionManager:
     async def connect(self, user_id: str, websocket: WebSocket):
         await websocket.accept()
         self.active_connections[user_id] = websocket
-        logger.info(f'User {user_id} connected to voice input')
+        logger.debug(f'User {user_id} connected to voice input')
 
     def disconnect(self, user_id: str):
         if user_id in self.active_connections:
             del self.active_connections[user_id]
-            logger.info(f'User {user_id} disconnected from voice input')
+            logger.debug(f'User {user_id} disconnected from voice input')
 
     async def send_message(self, user_id: str, message: dict):
         if user_id in self.active_connections:
@@ -75,6 +72,8 @@ async def voice_stream(
         session_data: Dict[str, Any] = {
             'hint_intent_type': None,  # Intent type from current screen
             'form_data': {},  # Existing form data from screen
+            'current_page': None,  # Current page user is on
+            'current_dialog': None,  # Current dialog that is open
             'is_recording': False,
         }
 
@@ -84,7 +83,6 @@ async def voice_stream(
         # Callback for when a segment is processed
         async def on_segment_processed(seg_id: int, text: str):
             """Send intermediate transcription to client"""
-            logger.debug(f'Segment {seg_id} processed: {text}')
             await websocket.send_json({
                 'type': 'partial_transcript',
                 'segment_id': seg_id,
@@ -108,14 +106,16 @@ async def voice_stream(
                         # Initial message with optional form context
                         hint_intent_type = data.get('intent_type')
                         form_data = data.get('form_data', {})
+                        current_page = data.get('current_page')
+                        current_dialog = data.get('current_dialog')
 
                         session_data['hint_intent_type'] = hint_intent_type
                         session_data['form_data'] = form_data
+                        session_data['current_page'] = current_page
+                        session_data['current_dialog'] = current_dialog
                         session_data['is_recording'] = True
 
-                        logger.info('Voice session initialized')
-                        logger.info(f'  Hint intent: {hint_intent_type}')
-                        logger.info(f'  Form data: {form_data}')
+                        logger.debug(f'Voice session initialized - page: {current_page}, dialog: {current_dialog}, intent: {hint_intent_type}')
 
                         await websocket.send_json({
                             'type': 'init_ack',
@@ -124,14 +124,12 @@ async def voice_stream(
 
                     elif message_type == 'stop_recording':
                         # User clicked ✓ (Stop & Save) - process the recording
-                        logger.info('Stop recording requested')
-
                         session_data['is_recording'] = False
 
                         try:
                             final_text = await audio_accumulator.get_transcription(auto_reset=True)
 
-                            logger.info(f'Final transcription: "{final_text}"')
+                            logger.debug(f'Transcription: "{final_text}"')
 
                             if not final_text or not final_text.strip():
                                 await websocket.send_json({
@@ -141,7 +139,6 @@ async def voice_stream(
                                 continue
 
                             # Step 3: Intent Understanding
-                            logger.info('Extracting intent...')
                             intent_result = await intent_service.extract_intent_and_params(
                                 text=final_text,
                                 form_data=session_data['form_data'],
@@ -151,8 +148,7 @@ async def voice_stream(
                             intent_type = intent_result['intent_type']
                             parameters = intent_result['parameters']
 
-                            logger.info(f'Intent: {intent_type}')
-                            logger.info(f'Parameters: {parameters}')
+                            logger.debug(f'Intent extracted: {intent_type} with params: {parameters}')
 
                             # Step 4: Check if intent changed
                             intent_changed = (
@@ -170,9 +166,28 @@ async def voice_stream(
                                 # Check if plugin requires confirmation for voice input
                                 needs_confirmation = plugin.requires_voice_confirmation
 
-                            logger.info(f'🔍 Plugin check: {intent_type}, needs_confirmation={needs_confirmation}')
+                            # Step 6: Determine suggested action based on context
+                            suggested_action = 'stay'  # Default action
 
-                            # Step 6: Prepare response
+                            if intent_changed:
+                                # User changed intent - suggest navigation or dialog open
+                                # For create intents, open dialog
+                                if intent_type.startswith('create_'):
+                                    suggested_action = 'open_dialog'
+                                # For view/list intents, navigate to page
+                                elif intent_type in ['view_bills', 'view_funds', 'view_accounts', 'view_transfers']:
+                                    suggested_action = 'navigate'
+                                # For deposit/withdraw/transfer, could stay if already on page or navigate
+                                else:
+                                    suggested_action = 'navigate'
+                            else:
+                                # Same intent - just update form or stay
+                                if parameters:
+                                    suggested_action = 'update_form'
+                                else:
+                                    suggested_action = 'stay'
+
+                            # Step 7: Prepare response
                             response_data = {
                                 'type': 'intent_extracted',
                                 'asr_text': final_text,
@@ -181,9 +196,9 @@ async def voice_stream(
                                 'parameters': parameters,
                                 'intent_changed': intent_changed,
                                 'needs_confirmation': needs_confirmation,
+                                'action': suggested_action,  # Add suggested action
                             }
 
-                            logger.info(f'Sending response: intent_changed={intent_changed}, needs_confirmation={needs_confirmation}')
                             await websocket.send_json(response_data)
 
                         except Exception as e:
@@ -214,8 +229,6 @@ async def voice_stream(
                                 'data': result.data,
                             })
 
-                            logger.info(f'✅ Execution completed: {result.message}')
-
                         except Exception as e:
                             logger.error(f'Error executing intent: {e}', exc_info=True)
                             await websocket.send_json({
@@ -225,7 +238,6 @@ async def voice_stream(
 
                     elif message_type == 'cancel':
                         # User clicked ✕ (Cancel) - discard everything
-                        logger.info('❌ User cancelled voice input')
                         session_data['is_recording'] = False
 
                         # Reset accumulator to discard all buffered audio
@@ -250,8 +262,6 @@ async def voice_stream(
                     await audio_accumulator.add_chunk(audio_chunk)
 
                     chunk_size = len(audio_chunk)
-
-                    logger.debug(f'>>> Audio chunk received: {chunk_size} bytes')
 
                     # Send acknowledgment
                     await websocket.send_json({
@@ -280,11 +290,10 @@ async def voice_stream(
 
     except WebSocketDisconnect:
         # Clean up on disconnect
-        logger.info('WebSocket disconnecting - cleaning up resources')
+        logger.debug('WebSocket disconnected - cleaning up resources')
         audio_accumulator.reset_state()
         if user_id:
             manager.disconnect(user_id)
-        logger.info('WebSocket disconnected')
     except Exception as e:
         logger.error(f'WebSocket error: {e}', exc_info=True)
         # Clean up on error
@@ -300,5 +309,5 @@ async def voice_stream(
             pass
     finally:
         # Final cleanup to ensure resources are released
-        logger.info('Final cleanup - resetting audio accumulator')
+        logger.debug('Final cleanup - resetting audio accumulator')
         audio_accumulator.reset_state()

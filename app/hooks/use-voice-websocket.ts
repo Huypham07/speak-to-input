@@ -9,6 +9,7 @@ interface VoiceWebSocketOptions {
     parameters: any;
     intent_changed: boolean;
     needs_confirmation: boolean;
+    action?: string; // Add optional action field
   }) => void;
   onExecutionSuccess?: (data: { data: any; message: string }) => void;
   onExecutionError?: (error: string) => void;
@@ -46,7 +47,6 @@ export function useVoiceWebSocket(options: VoiceWebSocketOptions = {}): UseVoice
 
           // Close existing connection
           if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
-            console.log("Closing existing connection...");
             wsRef.current.close();
             wsRef.current = null;
           }
@@ -64,7 +64,6 @@ export function useVoiceWebSocket(options: VoiceWebSocketOptions = {}): UseVoice
           }, 10000); // 10 seconds timeout
 
           ws.onopen = () => {
-            console.log("✅ WebSocket connected!");
             setIsConnected(true);
 
             // Send initialization message
@@ -73,22 +72,18 @@ export function useVoiceWebSocket(options: VoiceWebSocketOptions = {}): UseVoice
               intent_type: intentType || null,
               form_data: formData || {},
             };
-            console.log("📤 Sending init message:", initMessage);
             ws.send(JSON.stringify(initMessage));
           };
 
           ws.onmessage = (event) => {
             try {
               const message = JSON.parse(event.data);
-              console.log("📥 WebSocket message received:", message);
 
               switch (message.type) {
                 case "connected":
-                  console.log("✅ Connection confirmed:", message.message);
                   break;
 
                 case "init_ack":
-                  console.log("✅ Session initialized:", message.message);
                   setIsReady(true);
                   clearTimeout(connectionTimeout);
                   resolve(); // Connection successful and ready
@@ -99,9 +94,6 @@ export function useVoiceWebSocket(options: VoiceWebSocketOptions = {}): UseVoice
                   break;
 
                 case "recording_stopped":
-                  console.log("✅ Recording saved:", message.message);
-                  console.log("📁 File:", message.filename);
-                  console.log("📊 Chunks:", message.chunks_count);
                   break;
 
                 case "intent_extracted":
@@ -119,7 +111,6 @@ export function useVoiceWebSocket(options: VoiceWebSocketOptions = {}): UseVoice
 
                 case "confirmation_required":
                   // Handle confirmation UI
-                  console.log("Confirmation required:", message);
                   break;
 
                 case "error":
@@ -151,10 +142,6 @@ export function useVoiceWebSocket(options: VoiceWebSocketOptions = {}): UseVoice
           };
 
           ws.onclose = (event) => {
-            console.log("🔌 WebSocket closed");
-            console.log("Close code:", event.code);
-            console.log("Close reason:", event.reason);
-            console.log("Was clean:", event.wasClean);
             setIsConnected(false);
             setIsReady(false);
             clearTimeout(connectionTimeout);
@@ -203,7 +190,6 @@ export function useVoiceWebSocket(options: VoiceWebSocketOptions = {}): UseVoice
 
   const stopRecording = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      console.log("📨 Sending stop_recording message to backend");
       wsRef.current.send(
         JSON.stringify({
           type: "stop_recording",
@@ -216,7 +202,6 @@ export function useVoiceWebSocket(options: VoiceWebSocketOptions = {}): UseVoice
 
   const confirmExecution = useCallback((intentType: string, parameters: any) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      console.log("📨 Sending confirm_execute message");
       wsRef.current.send(
         JSON.stringify({
           type: "confirm_execute",
@@ -229,7 +214,6 @@ export function useVoiceWebSocket(options: VoiceWebSocketOptions = {}): UseVoice
 
   const cancelRecording = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      console.log("📨 Sending cancel message");
       wsRef.current.send(
         JSON.stringify({
           type: "cancel",

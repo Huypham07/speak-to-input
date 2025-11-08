@@ -7,10 +7,11 @@ import { useEffect, useState } from "react";
 import { Navbar } from "@/components/layout/navbar";
 import { BillsList } from "@/components/dashboard/bills-list";
 import { BillForm } from "@/components/financial/bill-form";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { FormDialog, FormDialogHeader, FormDialogTitle } from "@/components/ui/form-dialog";
 import { ChevronLeft } from "lucide-react";
 import { useSpeech } from "@/lib/speech-context";
 import { VoiceFormSync } from "@/components/speech/voice-form-sync";
+import { useAppStore } from "@/lib/stores/app-store";
 
 export default function BillsPage() {
   const { user, isLoading } = useAuth();
@@ -18,22 +19,24 @@ export default function BillsPage() {
   const router = useRouter();
   const [isCreating, setIsCreating] = useState(false);
   const { extractedIntent } = useSpeech();
+  const isRecording = useAppStore((state) => state.isRecording);
 
-  // Auto-open dialog ONLY when voice intent has sufficient parameters
+  // Auto-open dialog ONLY for CREATE_BILL intent
   useEffect(() => {
     if (!extractedIntent || extractedIntent.intent_changed) return;
 
     const { intent_type, parameters } = extractedIntent;
 
-    // CREATE_BILL: Auto-open if has basic info (bill_name or amount)
-    if (intent_type === "create_bill" && (parameters.bill_name || parameters.amount)) {
+    // STRICTLY only handle create_bill - nothing else
+    if (intent_type !== "create_bill") {
+      return; // Exit early for all other intents
+    }
+
+    // Only open if has basic info
+    if (parameters.bill_name || parameters.amount) {
       setIsCreating(true);
     }
 
-    // PAY_BILL: Auto-open ONLY if has bill_id (otherwise just navigate to list)
-    if (intent_type === "pay_bill" && parameters.bill_id) {
-      setIsCreating(true);
-    }
   }, [extractedIntent]);
 
   // Redirect to login if not authenticated
@@ -42,6 +45,15 @@ export default function BillsPage() {
       router.push("/login");
     }
   }, [user, isLoading, router]);
+
+  // Prevent dialog close when recording
+  const handleOpenChange = (open: boolean) => {
+    if (!open && isRecording) {
+      // Don't close dialog while recording
+      return;
+    }
+    setIsCreating(open);
+  };
 
   if (!user) return null;
 
@@ -74,16 +86,17 @@ export default function BillsPage() {
       </main>
 
       {/* Create Bill Modal */}
-      <Dialog open={isCreating} onOpenChange={setIsCreating}>
-        <DialogContent className="max-w-2xl w-[95vw] sm:w-full max-h-[85vh] sm:max-h-[90vh] flex flex-col p-0 rounded-xl sm:rounded-2xl gap-0">
-          <DialogHeader className="px-4 sm:px-6 pt-4 sm:pt-6 pb-3 sm:pb-4 border-b shrink-0">
-            <DialogTitle className="text-lg sm:text-xl">Tạo hóa đơn mới</DialogTitle>
-          </DialogHeader>
-          <div className="overflow-y-auto flex-1 px-4 sm:px-6 pt-3 sm:pt-4">
-            <BillForm onSuccess={() => setIsCreating(false)} />
-          </div>
-        </DialogContent>
-      </Dialog>
+      <FormDialog
+        open={isCreating}
+        onOpenChange={handleOpenChange}
+        className="max-w-2xl w-[95vw] sm:w-full max-h-[calc(85vh-5rem)] sm:max-h-[90vh] flex flex-col p-0 rounded-xl sm:rounded-2xl gap-0">
+        <FormDialogHeader className="px-4 sm:px-6 pt-4 sm:pt-6 pb-3 sm:pb-4 border-b shrink-0">
+          <FormDialogTitle className="text-lg sm:text-xl">Tạo hóa đơn mới</FormDialogTitle>
+        </FormDialogHeader>
+        <div className="overflow-y-auto flex-1 px-4 sm:px-6 pt-3 sm:pt-4">
+          <BillForm onSuccess={() => setIsCreating(false)} />
+        </div>
+      </FormDialog>
     </div>
   );
 }

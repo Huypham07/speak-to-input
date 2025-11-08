@@ -2,10 +2,13 @@
 
 import type React from "react";
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useVoiceWebSocket } from "@/hooks/use-voice-websocket";
 import { useAuth } from "@/lib/auth-context";
+import { useAppStore } from "@/lib/stores/app-store";
+import { useFormStore } from "@/lib/stores/form-store";
 import { VoiceRecordingDialog } from "@/components/speech/voice-recording-dialog";
+import { VoiceProcessingOverlay } from "@/components/speech/voice-processing-overlay";
 import { cleanupMicrophoneResources, stopMediaStream } from "@/lib/microphone-utils";
 import { encodeWav, downsampleBuffer } from "@/lib/audio-utils";
 import { toast } from "sonner";
@@ -27,6 +30,7 @@ interface SpeechContextType {
     intent_changed: boolean;
     needs_confirmation: boolean;
   } | null;
+  clearIntent: () => void;
   confirmExecution: () => void;
   cancelExecution: () => void;
   isConnected: boolean;
@@ -37,6 +41,14 @@ const SpeechContext = createContext<SpeechContextType | undefined>(undefined);
 export function SpeechProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
+
+  // Zustand stores
+  const setIsProcessingVoice = useAppStore((state) => state.setIsProcessingVoice);
+  const setIsRecording = useAppStore((state) => state.setIsRecording);
+  const currentDialog = useAppStore((state) => state.currentDialog);
+  const getCurrentFormContext = useFormStore((state) => state.getCurrentFormContext);
+
   const [isListening, setIsListening] = useState(false);
   const [isRecordingDialogOpen, setIsRecordingDialogOpen] = useState(false);
   const [transcript, setTranscript] = useState("");
@@ -56,6 +68,15 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
   const workletNodeRef = useRef<AudioWorkletNode | null>(null);
   const audioBufferRef = useRef<Float32Array[]>([]);
 
+  // Sync isProcessing with AppState
+  const updateProcessingState = useCallback(
+    (processing: boolean) => {
+      setIsProcessing(processing);
+      setIsProcessingVoice(processing);
+    },
+    [setIsProcessingVoice]
+  );
+
   const {
     connect,
     disconnect,
@@ -68,8 +89,6 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
     isReady,
   } = useVoiceWebSocket({
     onIntentExtracted: (data) => {
-      console.log("🎯 Intent extracted:", data);
-
       // Save transcript and normalized text
       setTranscript(data.asr_text);
       setNormalizedText(data.normalized_text);
@@ -120,7 +139,10 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
         needs_confirmation: data.needs_confirmation,
       });
 
-      setIsProcessing(false);
+      updateProcessingState(false);
+
+      // Get suggested action from backend (or default to navigate for backward compatibility)
+      const suggestedAction = data.action || "navigate";
 
       // Map normalized intent types to routes and Vietnamese names
       const intentInfoMap: Record<string, { route: string; name: string }> = {
@@ -164,15 +186,26 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
           const requiredParamsMap: Record<string, string[]> = {
             create_transfer: ["amount", "recipient"],
             create_bill: ["bill_name", "amount"],
-            pay_bill: ["bill_id"], // Needs existing bill ID
+            pay_bill: [], // Can use bill_id OR bill_name
             create_fund: ["fund_name", "target_amount"],
-            deposit_fund: ["fund_id", "amount"], // Needs existing fund ID
-            withdraw_fund: ["fund_id", "amount"], // Needs existing fund ID
-            delete_fund: ["fund_id"], // Needs existing fund ID
+            deposit_fund: ["amount"], // Can use fund_id OR fund_name
+            withdraw_fund: ["amount"], // Can use fund_id OR fund_name
+            delete_fund: [], // Can use fund_id OR fund_name
           };
 
           const required = requiredParamsMap[intentType] || [];
           const missing = required.filter((key) => !params[key] || params[key] === "");
+
+          // Special validation for intents that can use either ID or name
+          if (intentType === "pay_bill") {
+            if (!params.bill_id && !params.bill_name) {
+              return { valid: false, missing: ["bill_id hoặc bill_name"] };
+            }
+          } else if (["deposit_fund", "withdraw_fund", "delete_fund"].includes(intentType)) {
+            if (!params.fund_id && !params.fund_name) {
+              return { valid: false, missing: ["fund_id hoặc fund_name"] };
+            }
+          }
 
           return { valid: missing.length === 0, missing };
         };
@@ -180,47 +213,96 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
         const validation = validateParams(normalizedIntentType, data.parameters);
         const paramCount = Object.keys(data.parameters).length;
 
-        // Show navigation loading toast
-        toast.loading("Đang chuyển trang...", {
-          description: `Đang chuyển đến ${intentInfo.name}`,
-          duration: 1500,
-          id: "voice-navigate", // Use ID to dismiss later
-        });
+        // Handle action based on backend suggestion
+        if (suggestedAction === "stay") {
+          // Just update form, don't navigate
 
-        // Navigate to the appropriate screen
-        if (data.intent_changed) {
-          console.log("🔄 Intent changed, navigating to:", data.intent_type);
-        }
-
-        router.push(intentInfo.route);
-
-        // Dismiss loading toast and show result after navigation
-        setTimeout(() => {
-          toast.dismiss("voice-navigate");
-
-          if (normalizedIntentType === "unknown") {
-            // Special handling for unknown intent
-            toast.warning("Không nhận dạng được lệnh", {
-              description: `Nội dung: "${data.asr_text}". Vui lòng thử lại với câu lệnh rõ ràng hơn.`,
-              duration: 5000,
+          if (paramCount > 0) {
+            toast.success("Đã cập nhật", {
+              description: `Đã nhận dạng ${paramCount} thông tin. Vui lòng kiểm tra.`,
+              duration: 3000,
             });
-          } else if (!validation.valid) {
-            // Missing required parameters
-            toast.warning(`${intentInfo.name}`, {
-              description: `Thiếu thông tin: ${validation.missing.join(", ")}. Vui lòng bổ sung thêm.`,
-              duration: 5000,
-            });
-            console.log("⚠️ Missing params:", validation.missing);
           } else {
-            // All parameters valid - success
+            toast.info("Không có thay đổi", {
+              description: "Không có thông tin mới để cập nhật.",
+              duration: 2000,
+            });
+          }
+        } else if (suggestedAction === "update_form") {
+          // Update form without navigation
+
+          toast.success("Đã cập nhật thông tin", {
+            description: `Đã nhận dạng ${paramCount} thông tin mới.`,
+            duration: 3000,
+          });
+        } else if (suggestedAction === "open_dialog") {
+          // Open dialog without full navigation (if already on page)
+
+          // For now, still navigate to page (dialog opening handled by page's useEffect)
+          toast.loading("Đang mở form...", {
+            description: `Đang mở ${intentInfo.name}`,
+            duration: 1000,
+            id: "voice-navigate",
+          });
+
+          router.push(intentInfo.route);
+
+          setTimeout(() => {
+            toast.dismiss("voice-navigate");
             toast.success(`${intentInfo.name}`, {
               description: `Đã nhận dạng ${paramCount} thông tin. Vui lòng kiểm tra và xác nhận.`,
               duration: 4000,
             });
-          }
-        }, 800); // Wait 800ms for navigation to complete
+          }, 800);
+        } else {
+          // Default: navigate (backward compatible)
 
-        console.log("📝 Form will be auto-filled with:", data.parameters);
+          // Show navigation loading toast
+          toast.loading("Đang chuyển trang...", {
+            description: `Đang chuyển đến ${intentInfo.name}`,
+            duration: 1500,
+            id: "voice-navigate",
+          });
+
+          // Navigate to the appropriate screen
+          if (data.intent_changed) {
+            // Intent changed, navigating
+          }
+
+          router.push(intentInfo.route);
+
+          // Dismiss loading toast and show result after navigation
+          setTimeout(() => {
+            toast.dismiss("voice-navigate");
+
+            if (normalizedIntentType === "unknown") {
+              // Special handling for unknown intent
+              toast.warning("Không nhận dạng được lệnh", {
+                description: `Nội dung: "${data.asr_text}". Vui lòng thử lại với câu lệnh rõ ràng hơn.`,
+                duration: 5000,
+              });
+            } else if (!validation.valid) {
+              // Missing required parameters
+              toast.warning(`${intentInfo.name}`, {
+                description: `Thiếu thông tin: ${validation.missing.join(", ")}. Vui lòng bổ sung thêm.`,
+                duration: 5000,
+              });
+            } else {
+              // All parameters valid
+              // For operation intents (deposit, withdraw, pay, delete), don't show success toast
+              // Let the component validate data existence and show appropriate message
+              const operationIntents = ["deposit_fund", "withdraw_fund", "delete_fund", "pay_bill"];
+
+              if (!operationIntents.includes(normalizedIntentType)) {
+                // Only show success toast for create intents
+                toast.success(`${intentInfo.name}`, {
+                  description: `Đã nhận dạng ${paramCount} thông tin. Vui lòng kiểm tra và xác nhận.`,
+                  duration: 4000,
+                });
+              }
+            }
+          }, 800); // Wait 800ms for navigation to complete
+        }
       } else {
         // Intent type not mapped - show error
         console.error("❌ Unknown intent type:", data.intent_type);
@@ -234,8 +316,7 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
       disconnect();
     },
     onExecutionSuccess: (data) => {
-      console.log("✅ Execution success:", data);
-      setIsProcessing(false);
+      updateProcessingState(false);
 
       // Clear voice data
       setTranscript("");
@@ -256,7 +337,7 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
     onExecutionError: (err) => {
       console.error("❌ Execution error:", err);
       setError(err);
-      setIsProcessing(false);
+      updateProcessingState(false);
 
       // Show error toast with details
       toast.error("Không thể thực hiện", {
@@ -270,7 +351,7 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
     onError: (err) => {
       console.error("❌ WebSocket error:", err);
       setError(err);
-      setIsProcessing(false);
+      updateProcessingState(false);
 
       // Show error toast
       toast.error("Lỗi nhận dạng giọng nói", {
@@ -287,13 +368,14 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
     async (formData?: any, intentType?: string) => {
       // Prevent double calls (React StrictMode)
       if (isListening || isConnected) {
-        console.log("⚠️ Already listening/connected, ignoring duplicate call");
         return;
       }
 
       try {
-        console.log("Form data:", JSON.stringify(formData, null, 2));
-        console.log("Intent type:", intentType);
+        // Get current form context from store
+        const formContext = getCurrentFormContext();
+        const contextFormData = formData || formContext.data;
+        const contextIntentType = intentType || formContext.type;
 
         setError(null);
         setTranscript("");
@@ -307,8 +389,24 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        // Connect to WebSocket
-        await connect(actualToken, formData, intentType);
+        // Prepare context data to send to backend
+        const contextData = {
+          formData: contextFormData,
+          intentType: contextIntentType,
+          currentPage: pathname,
+          currentDialog: currentDialog.isOpen
+            ? {
+                type: currentDialog.type,
+                data: currentDialog.data,
+              }
+            : null,
+        };
+
+        // Connect to WebSocket with context
+        await connect(actualToken, contextData.formData, contextData.intentType ?? undefined);
+
+        // Mark as recording
+        setIsRecording(true);
 
         // Start recording audio
         console.log("Starting audio recording...");
@@ -357,7 +455,6 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
         source.connect(workletNode);
         // Note: We don't connect to destination to avoid echo
 
-        console.log("🎙️ Recording started! Capturing raw PCM audio via AudioWorklet");
         setIsListening(true);
         setIsRecordingDialogOpen(true); // Show dialog
       } catch (err) {
@@ -367,7 +464,18 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
         disconnect();
       }
     },
-    [connect, disconnect, isReady, sendAudioChunk, isListening, isConnected]
+    [
+      connect,
+      disconnect,
+      isReady,
+      sendAudioChunk,
+      isListening,
+      isConnected,
+      pathname,
+      currentDialog,
+      getCurrentFormContext,
+      setIsRecording,
+    ]
   );
 
   // Helper function to send accumulated audio
@@ -386,10 +494,6 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
     // Encode to WAV
     const wavBuffer = encodeWav(merged, 16000);
 
-    console.log(
-      `📤 Sending WAV chunk: ${audioBufferRef.current.length} buffers, ${totalLength} samples, ${wavBuffer.byteLength} bytes`
-    );
-
     // Send to backend
     sendAudioChunk(wavBuffer);
 
@@ -398,8 +502,7 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
   }, [sendAudioChunk]);
 
   const stopListening = useCallback(async () => {
-    console.log("⏹️ Stopping recording...");
-    setIsProcessing(true);
+    updateProcessingState(true);
 
     try {
       // Send any remaining audio
@@ -421,6 +524,7 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
       stopRecording();
 
       setIsListening(false);
+      setIsRecording(false); // Clear recording state
       setIsRecordingDialogOpen(false); // Close dialog
 
       // Stop all tracks using utility function
@@ -432,8 +536,6 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
 
       // DON'T close WebSocket yet - wait for backend response
       // disconnect() will be called after receiving intent_extracted or execution_success
-
-      console.log("✅ Recording stopped, waiting for backend response...");
     } catch (err) {
       console.error("Error stopping recording:", err);
       setError("Failed to stop recording");
@@ -485,14 +587,13 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
     disconnect();
 
     setIsListening(false);
+    setIsRecording(false); // Clear recording state
     setIsRecordingDialogOpen(false);
-    setIsProcessing(false);
+    updateProcessingState(false);
     setTranscript("");
     setNormalizedText("");
     setExtractedIntent(null);
-
-    console.log("🗑️ Recording cancelled and discarded");
-  }, [disconnect, wsCancelRecording]);
+  }, [disconnect, wsCancelRecording, setIsRecording]);
 
   const clearTranscript = useCallback(() => {
     setTranscript("");
@@ -501,20 +602,20 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
     setExtractedIntent(null);
   }, []);
 
+  const clearIntent = useCallback(() => {
+    setExtractedIntent(null);
+  }, []);
+
   const confirmExecution = useCallback(() => {
     if (!extractedIntent) {
-      console.error("❌ No intent to execute");
       return;
     }
 
-    console.log("✅ Confirming execution:", extractedIntent);
-    setIsProcessing(true);
+    updateProcessingState(true);
     wsConfirmExecution(extractedIntent.intent_type, extractedIntent.parameters);
-  }, [extractedIntent, wsConfirmExecution]);
+  }, [extractedIntent, wsConfirmExecution, updateProcessingState]);
 
   const cancelExecution = useCallback(() => {
-    console.log("❌ Cancelling execution from confirmation dialog...");
-
     // Send cancel message to backend
     wsCancelRecording();
 
@@ -522,19 +623,15 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
     disconnect();
 
     // Reset all states
-    setIsProcessing(false);
+    updateProcessingState(false);
     setTranscript("");
     setNormalizedText("");
     setExtractedIntent(null);
-
-    console.log("🗑️ Execution cancelled");
-  }, [disconnect, wsCancelRecording]);
+  }, [disconnect, wsCancelRecording, updateProcessingState]);
 
   // Cleanup on unmount only
   useEffect(() => {
     return () => {
-      console.log("🧹 SpeechContext unmounting - cleaning up resources");
-
       // Stop audio processing
       if (workletNodeRef.current) {
         workletNodeRef.current.disconnect();
@@ -555,8 +652,6 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
 
       // Disconnect WebSocket
       disconnect();
-
-      console.log("✅ SpeechContext cleanup complete");
     };
   }, [disconnect]);
 
@@ -574,19 +669,23 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
         cancelRecording,
         clearTranscript,
         extractedIntent,
+        clearIntent,
         confirmExecution,
         cancelExecution,
         isConnected,
       }}>
       {children}
 
-      {/* Voice Recording Dialog - Only dialog we need */}
+      {/* Voice Recording Dialog - Shows waveform during recording */}
       <VoiceRecordingDialog
         open={isRecordingDialogOpen}
         onClose={cancelRecording}
         onStop={stopListening}
         isProcessing={isProcessing}
       />
+
+      {/* Voice Processing Overlay - Shows when processing voice */}
+      <VoiceProcessingOverlay />
     </SpeechContext.Provider>
   );
 }
