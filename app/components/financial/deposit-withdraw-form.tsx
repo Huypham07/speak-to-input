@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Wallet, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { fetchWithAuth } from "@/lib/fetch-auth";
+import { useFormStore } from "@/lib/stores/form-store";
+import { useAppStore } from "@/lib/stores/app-store";
 
 interface DepositWithdrawFormProps {
   accountId: number;
@@ -21,6 +23,33 @@ export function DepositWithdrawForm({ accountId, currentBalance, onSuccess }: De
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+
+  // Zustand stores
+  const setCurrentForm = useFormStore((state) => state.setCurrentForm);
+  const updateFormData = useFormStore((state) => state.updateFormData);
+  const clearForm = useFormStore((state) => state.clearForm);
+  const isRecording = useAppStore((state) => state.isRecording);
+
+  // Update form store when data changes
+  useEffect(() => {
+    setCurrentForm("deposit_withdraw", { amount, note });
+  }, [amount, note, setCurrentForm]);
+
+  // Clear on unmount
+  useEffect(() => {
+    return () => clearForm();
+  }, [clearForm]);
+
+  // Handle field changes and sync to store
+  const handleAmountChange = (value: string) => {
+    setAmount(value);
+    updateFormData({ amount: value });
+  };
+
+  const handleNoteChange = (value: string) => {
+    setNote(value);
+    updateFormData({ note: value });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,8 +97,8 @@ export function DepositWithdrawForm({ accountId, currentBalance, onSuccess }: De
       });
 
       // Reset form
-      setAmount("");
-      setNote("");
+      handleAmountChange("");
+      handleNoteChange("");
 
       if (onSuccess) {
         console.log("Calling onSuccess callback");
@@ -109,7 +138,7 @@ export function DepositWithdrawForm({ accountId, currentBalance, onSuccess }: De
               type="number"
               placeholder="0"
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              onChange={(e) => handleAmountChange(e.target.value)}
               min="0"
               step="1000"
               required
@@ -124,7 +153,7 @@ export function DepositWithdrawForm({ accountId, currentBalance, onSuccess }: De
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => setAmount(quickAmount.toString())}>
+                onClick={() => handleAmountChange(quickAmount.toString())}>
                 {(quickAmount / 1000).toLocaleString("vi-VN")}k
               </Button>
             ))}
@@ -137,7 +166,7 @@ export function DepositWithdrawForm({ accountId, currentBalance, onSuccess }: De
               id="note"
               placeholder="Nhập ghi chú..."
               value={note}
-              onChange={(e) => setNote(e.target.value)}
+              onChange={(e) => handleNoteChange(e.target.value)}
               rows={3}
             />
           </div>

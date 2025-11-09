@@ -36,13 +36,11 @@ export function VoiceFormSync({ intentType, onParametersReceived, getCurrentForm
 
   // Auto-fill form when voice parameters are received
   useEffect(() => {
-    if (
-      extractedIntent &&
-      extractedIntent.intent_type === intentType &&
-      !extractedIntent.intent_changed // Only fill if on same screen
-    ) {
+    if (extractedIntent && extractedIntent.intent_type === intentType) {
       console.log(`📝 [VoiceFormSync] Auto-filling ${intentType} with:`, extractedIntent.parameters);
       onParametersReceived(extractedIntent.parameters);
+    } else if (extractedIntent) {
+      console.log(`⚠️ [VoiceFormSync] Intent mismatch: expected ${intentType}, got ${extractedIntent.intent_type}`);
     }
   }, [extractedIntent, intentType, onParametersReceived]);
 

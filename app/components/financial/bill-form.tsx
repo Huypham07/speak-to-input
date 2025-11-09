@@ -3,7 +3,8 @@
 import type React from "react";
 import { useState, useEffect, useCallback } from "react";
 import { useFinancial } from "@/lib/financial-context";
-import { useFormContext } from "@/lib/form-context";
+import { useFormStore } from "@/lib/stores/form-store";
+import { useAppStore } from "@/lib/stores/app-store";
 import { useSpeech } from "@/lib/speech-context";
 import { VoiceFormSync } from "@/components/speech/voice-form-sync";
 import { Button } from "@/components/ui/button";
@@ -40,31 +41,43 @@ export function BillForm({ onSuccess }: { onSuccess: () => void }) {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(false);
   const { addBill, refreshBills } = useFinancial();
-  const { setCurrentForm, clearForm } = useFormContext();
   const { isListening } = useSpeech();
 
+  // Zustand stores
+  const setCurrentForm = useFormStore((state) => state.setCurrentForm);
+  const updateFormData = useFormStore((state) => state.updateFormData);
+  const clearForm = useFormStore((state) => state.clearForm);
+  const isRecording = useAppStore((state) => state.isRecording);
+
   // Handle voice parameters
-  const handleVoiceParameters = useCallback((params: Record<string, any>) => {
-    console.log("📝 Filling bill form with voice params:", params);
+  const handleVoiceParameters = useCallback(
+    (params: Record<string, any>) => {
+      setFormData((prev) => {
+        const updated = {
+          ...prev,
+          ...(params.bill_name && { bill_name: params.bill_name }),
+          ...(params.amount && { amount: String(params.amount) }),
+          ...(params.category && { category: params.category }),
+          ...(params.due_date && { due_date: params.due_date }),
+          ...(params.notes && { notes: params.notes }),
+        };
 
-    setFormData((prev) => ({
-      ...prev,
-      ...(params.bill_name && { bill_name: params.bill_name }),
-      ...(params.amount && { amount: String(params.amount) }),
-      ...(params.category && { category: params.category }),
-      ...(params.due_date && { due_date: params.due_date }),
-      ...(params.notes && { notes: params.notes }),
-    }));
+        // Update store
+        updateFormData(updated);
+        return updated;
+      });
 
-    // Mark filled fields as touched
-    if (params.bill_name) setTouched((prev) => ({ ...prev, bill_name: true }));
-    if (params.amount) setTouched((prev) => ({ ...prev, amount: true }));
-    if (params.due_date) setTouched((prev) => ({ ...prev, due_date: true }));
-  }, []);
+      // Mark filled fields as touched
+      if (params.bill_name) setTouched((prev) => ({ ...prev, bill_name: true }));
+      if (params.amount) setTouched((prev) => ({ ...prev, amount: true }));
+      if (params.due_date) setTouched((prev) => ({ ...prev, due_date: true }));
+    },
+    [updateFormData]
+  );
 
   // Update form context when form data changes
   useEffect(() => {
-    setCurrentForm("CREATE_BILL", formData);
+    setCurrentForm("create_bill", formData);
   }, [formData, setCurrentForm]);
 
   // Clear form context on unmount
@@ -220,7 +233,7 @@ export function BillForm({ onSuccess }: { onSuccess: () => void }) {
         getCurrentFormData={() => formData}
       />
 
-      <form onSubmit={handleSubmit} className="space-y-6 pb-4">
+      <form onSubmit={handleSubmit} className="space-y-6 pb-24" id="bill-form">
         {/* Bill Name */}
         <div className="space-y-2">
           <Label htmlFor="title" className="text-sm font-medium">
@@ -327,14 +340,14 @@ export function BillForm({ onSuccess }: { onSuccess: () => void }) {
           />
           <p className="text-xs text-muted-foreground">Tối đa 500 ký tự</p>
         </div>
-
-        {/* Submit Button */}
-        <div className="pt-4">
-          <Button type="submit" className="w-full" disabled={isLoading || isListening}>
-            {isLoading ? "Đang tạo..." : "Tạo hóa đơn"}
-          </Button>
-        </div>
       </form>
+
+      {/* Submit button outside form - sticky at bottom */}
+      <div className="rounded-b-xl sm:rounded-b-2xl sticky bottom-0 left-0 right-0 bg-background border-t pt-4 -mx-4 sm:-mx-6 px-4 sm:px-6 pb-4 shadow-lg z-10">
+        <Button type="submit" form="bill-form" className="w-full" disabled={isLoading || isListening}>
+          {isLoading ? "Đang tạo..." : "Tạo hóa đơn"}
+        </Button>
+      </div>
     </>
   );
 }

@@ -85,7 +85,12 @@ class IntentUnderstandingService:
         prompt_parts.append('\n\nCHÚ Ý:')
         prompt_parts.append("- Số tiền có thể viết: '500 nghìn', '5 triệu', '1.5 triệu', '500000'")
         prompt_parts.append('- Số tiền LUÔN lưu dưới dạng VND đầy đủ (ví dụ: 500000, không phải 500)')
-        prompt_parts.append('- Người nhận có thể là tên, số tài khoản, hoặc mối quan hệ (mẹ, bố, anh, chị)')
+        prompt_parts.append('- Người nhận:')
+        prompt_parts.append('  + Nếu là TÊN (mẹ, bố, anh, chị, tên người): lưu vào "recipient_name"')
+        prompt_parts.append('  + Nếu là SỐ TÀI KHOẢN (dãy số): lưu vào "recipient_account_number"')
+        prompt_parts.append('  + Nếu không rõ: lưu vào "recipient" (hệ thống sẽ tự phân tích)')
+        prompt_parts.append('  + VÍ DỤ: "chuyển cho mẹ" → recipient_name="mẹ"')
+        prompt_parts.append('  + VÍ DỤ: "chuyển cho 123456789" → recipient_account_number="123456789"')
         prompt_parts.append("- Trả về JSON với format: {\"intent\": \"INTENT_TYPE\", \"confidence\": 0.0-1.0, \"parameters\": {...}}")
 
         self.system_prompt = '\n'.join(prompt_parts)

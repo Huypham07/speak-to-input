@@ -255,6 +255,7 @@ async def deposit_to_fund(
             )
 
         return {
+            'success': True,
             'fund_id': result.data.get('fund_id', fund_id),
             'current_amount': result.data.get('current_amount', float(updated_fund.current_amount)),
             'deposit_amount': result.data.get('deposit_amount', request.amount),
@@ -317,6 +318,7 @@ async def withdraw_from_fund(
             )
 
         return {
+            'success': True,
             'fund_id': result.data.get('fund_id', fund_id),
             'current_amount': result.data.get('current_amount', float(updated_fund.current_amount)),
             'withdraw_amount': result.data.get('withdraw_amount', request.amount),

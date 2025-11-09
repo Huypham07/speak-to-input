@@ -1,31 +1,32 @@
 "use client";
 
 import { useSpeech } from "@/lib/speech-context";
-import { useFormContext } from "@/lib/form-context";
+import { useFormStore } from "@/lib/stores/form-store";
 import { Mic, Square } from "lucide-react";
 
 export function SpeechButton() {
   const { isListening, isProcessing, startListening, stopListening, isConnected } = useSpeech();
-  const { currentForm } = useFormContext();
+  const formData = useFormStore((state) => state.data);
+  const formType = useFormStore((state) => state.type);
 
   const handleClick = async () => {
     if (isListening) {
       await stopListening();
     } else {
       // Start listening with current form data and intent type
-      await startListening(currentForm.data, currentForm.type ?? undefined);
+      await startListening(formData, formType ?? undefined);
     }
   };
 
-  const isDisabled = isProcessing || (!isListening && !isConnected && currentForm.type !== null);
+  const isDisabled = isProcessing || (!isListening && !isConnected && formType !== null);
 
   return (
     <>
-      {/* Desktop Speech Button */}
+      {/* Desktop Speech Button - Always visible */}
       <button
         onClick={handleClick}
         disabled={isDisabled}
-        className="hidden md:flex items-center justify-center w-14 h-14 rounded-full bg-linear-to-r from-blue-600 to-emerald-600 text-white shadow-lg hover:shadow-xl transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed relative"
+        className="hidden md:flex items-center justify-center w-14 h-14 rounded-full bg-linear-to-r from-blue-600 to-emerald-600 text-white shadow-lg hover:shadow-xl transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed relative z-60"
         title={isListening ? "Dừng ghi âm" : "Bắt đầu ghi âm"}>
         {isListening ? (
           <>

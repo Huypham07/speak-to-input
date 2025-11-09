@@ -1,8 +1,10 @@
 "use client";
 
 import type React from "react";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useFinancial } from "@/lib/financial-context";
+import { useFormStore } from "@/lib/stores/form-store";
+import { useAppStore } from "@/lib/stores/app-store";
 import { VoiceFormSync } from "@/components/speech/voice-form-sync";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,26 +48,51 @@ export function FundForm({ onSuccess }: { onSuccess: () => void }) {
   const [isLoading, setIsLoading] = useState(false);
   const { addFund } = useFinancial();
 
+  // Zustand stores
+  const setCurrentForm = useFormStore((state) => state.setCurrentForm);
+  const updateFormData = useFormStore((state) => state.updateFormData);
+  const clearForm = useFormStore((state) => state.clearForm);
+  const isRecording = useAppStore((state) => state.isRecording);
+
   // Handle voice parameters
-  const handleVoiceParameters = useCallback((params: Record<string, any>) => {
-    console.log("📝 Filling fund form with voice params:", params);
+  const handleVoiceParameters = useCallback(
+    (params: Record<string, any>) => {
+      setFormData((prev) => {
+        const updated = {
+          ...prev,
+          ...(params.fund_name && { fund_name: params.fund_name }),
+          ...(params.target_amount && { target_amount: String(params.target_amount) }),
+          ...(params.target_date && { target_date: params.target_date }),
+          ...(params.initial_amount && { initial_amount: String(params.initial_amount) }),
+          ...(params.monthly_contribution && { monthly_contribution: String(params.monthly_contribution) }),
+          ...(params.category && { category: params.category }),
+          ...(params.notes && { notes: params.notes }),
+        };
 
-    setFormData((prev) => ({
-      ...prev,
-      ...(params.fund_name && { fund_name: params.fund_name }),
-      ...(params.target_amount && { target_amount: String(params.target_amount) }),
-      ...(params.target_date && { target_date: params.target_date }),
-      ...(params.initial_amount && { initial_amount: String(params.initial_amount) }),
-      ...(params.monthly_contribution && { monthly_contribution: String(params.monthly_contribution) }),
-      ...(params.category && { category: params.category }),
-      ...(params.notes && { notes: params.notes }),
-    }));
+        // Update store
+        updateFormData(updated);
+        return updated;
+      });
 
-    // Mark filled fields as touched
-    if (params.fund_name) setTouched((prev) => ({ ...prev, fund_name: true }));
-    if (params.target_amount) setTouched((prev) => ({ ...prev, target_amount: true }));
-    if (params.target_date) setTouched((prev) => ({ ...prev, target_date: true }));
-  }, []);
+      // Mark filled fields as touched
+      if (params.fund_name) setTouched((prev) => ({ ...prev, fund_name: true }));
+      if (params.target_amount) setTouched((prev) => ({ ...prev, target_amount: true }));
+      if (params.target_date) setTouched((prev) => ({ ...prev, target_date: true }));
+    },
+    [updateFormData]
+  );
+
+  // Update form context when form data changes
+  useEffect(() => {
+    setCurrentForm("create_fund", formData);
+  }, [formData, setCurrentForm]);
+
+  // Clear form context on unmount
+  useEffect(() => {
+    return () => {
+      clearForm();
+    };
+  }, [clearForm]);
 
   // Get minimum date (today) for date input
   const getMinDate = () => {
@@ -252,7 +279,7 @@ export function FundForm({ onSuccess }: { onSuccess: () => void }) {
       />
 
       <div className="space-y-4">
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" id="fund-form">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="fund_name">Tên quỹ *</Label>
@@ -384,12 +411,14 @@ export function FundForm({ onSuccess }: { onSuccess: () => void }) {
               rows={3}
             />
           </div>
-          <div className="rounded-b-xl sm:rounded-b-2xl sticky bottom-0 left-0 right-0 bg-background border-t pt-4 -mx-4 sm:-mx-6 px-4 sm:px-6 pb-4 shadow-lg z-10">
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? "Đang tạo..." : "Tạo quỹ tiết kiệm"}
-            </Button>
-          </div>
         </form>
+
+        {/* Submit button outside form - sticky at bottom */}
+        <div className="rounded-b-xl sm:rounded-b-2xl sticky bottom-0 left-0 right-0 bg-background border-t pt-4 -mx-4 sm:-mx-6 px-4 sm:px-6 pb-4 shadow-lg z-10">
+          <Button type="submit" form="fund-form" className="w-full" disabled={isLoading}>
+            {isLoading ? "Đang tạo..." : "Tạo quỹ tiết kiệm"}
+          </Button>
+        </div>
       </div>
     </>
   );
