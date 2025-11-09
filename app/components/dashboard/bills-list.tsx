@@ -8,22 +8,15 @@ import { FileText, Plus, CreditCard } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import { useSpeech } from "@/lib/speech-context";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { FormDialog, FormDialogHeader, FormDialogTitle, FormDialogDescription } from "@/components/ui/form-dialog";
+import { usePathname } from "next/navigation";
 
 interface BillsListProps {
   onCreateBill?: () => void;
 }
 
 export function BillsList({ onCreateBill }: BillsListProps) {
+  const pathname = usePathname();
   const { bills, payBill, refreshBills } = useFinancial();
   const { extractedIntent, clearIntent } = useSpeech();
   const [payingBillId, setPayingBillId] = useState<number | null>(null);
@@ -50,7 +43,10 @@ export function BillsList({ onCreateBill }: BillsListProps) {
 
   // Handle voice intent for pay_bill
   useEffect(() => {
-    if (!extractedIntent || extractedIntent.intent_changed || !bills || bills.length === 0) return;
+    // Only handle voice intents when on the bills page
+    if (pathname !== "/bills") return;
+
+    if (!extractedIntent || !bills || bills.length === 0) return;
 
     const { intent_type, parameters } = extractedIntent;
 
@@ -69,13 +65,13 @@ export function BillsList({ onCreateBill }: BillsListProps) {
       // Check for duplicate names
       if (matchingBills.length > 1) {
         // Show disambiguation dialog to let user choose
-        // Use setTimeout to ensure overlay is closed and navigation is complete
+        // Use setTimeout to ensure navigation is complete before opening dialog
         setTimeout(() => {
           setDisambiguationDialog({
             open: true,
             bills: matchingBills,
           });
-        }, 100); // Small delay to ensure UI is ready
+        }, 300); // Delay to ensure page is rendered
 
         clearIntent();
         return;
@@ -94,18 +90,21 @@ export function BillsList({ onCreateBill }: BillsListProps) {
 
       if (bill.status !== "paid") {
         // Auto-open pay confirmation dialog
-        setPayConfirmDialog({
-          open: true,
-          billId: bill.id,
-          billName: bill.bill_name,
-          amount: bill.amount,
-        });
+        // Use setTimeout to ensure navigation is complete before opening dialog
+        setTimeout(() => {
+          setPayConfirmDialog({
+            open: true,
+            billId: bill.id,
+            billName: bill.bill_name,
+            amount: bill.amount,
+          });
 
-        // Show success toast when found and opening confirmation
-        toast.success("Thanh toán hóa đơn", {
-          description: `Đã tìm thấy hóa đơn "${bill.bill_name}". Vui lòng xác nhận thanh toán.`,
-          duration: 3000,
-        });
+          // Show success toast when found and opening confirmation
+          toast.success("Thanh toán hóa đơn", {
+            description: `Đã tìm thấy hóa đơn "${bill.bill_name}". Vui lòng xác nhận thanh toán.`,
+            duration: 3000,
+          });
+        }, 300); // Delay to ensure page is rendered
 
         clearIntent(); // Clear intent after handling
       } else {
@@ -115,7 +114,7 @@ export function BillsList({ onCreateBill }: BillsListProps) {
         clearIntent();
       }
     }
-  }, [extractedIntent, bills, clearIntent]);
+  }, [extractedIntent, bills, clearIntent, pathname]);
 
   const handlePayBill = async (billId: number, billName: string) => {
     if (payingBillId) return; // Prevent multiple simultaneous payments
@@ -154,22 +153,25 @@ export function BillsList({ onCreateBill }: BillsListProps) {
   // Handle bill selection from disambiguation dialog
   const handleBillSelection = (bill: (typeof disambiguationDialog.bills)[0]) => {
     try {
-      // Close disambiguation dialog
+      // Close disambiguation dialog first
       setDisambiguationDialog({ open: false, bills: [] });
 
-      // Open pay confirmation for selected bill
-      if (bill.status !== "paid") {
-        setPayConfirmDialog({
-          open: true,
-          billId: bill.id,
-          billName: bill.bill_name,
-          amount: bill.amount,
-        });
-      } else {
-        toast.info(`Hóa đơn "${bill.bill_name}" đã được thanh toán rồi`, {
-          duration: 3000,
-        });
-      }
+      // Wait for dialog to close before opening the next one
+      setTimeout(() => {
+        // Open pay confirmation for selected bill
+        if (bill.status !== "paid") {
+          setPayConfirmDialog({
+            open: true,
+            billId: bill.id,
+            billName: bill.bill_name,
+            amount: bill.amount,
+          });
+        } else {
+          toast.info(`Hóa đơn "${bill.bill_name}" đã được thanh toán rồi`, {
+            duration: 3000,
+          });
+        }
+      }, 100); // Small delay to ensure previous dialog is fully closed
     } catch (error) {
       console.error("Error in handleBillSelection:", error);
       toast.error("Có lỗi xảy ra khi chọn hóa đơn. Vui lòng thử lại.");
@@ -302,108 +304,109 @@ export function BillsList({ onCreateBill }: BillsListProps) {
       </CardContent>
 
       {/* Pay Bill Confirmation Dialog */}
-      <AlertDialog
+      <FormDialog
         open={payConfirmDialog.open}
         onOpenChange={(open) => {
           if (!open) {
             setPayConfirmDialog({ open: false, billId: null, billName: "", amount: 0 });
           }
         }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Xác nhận thanh toán</AlertDialogTitle>
-            <AlertDialogDescription>
-              Bạn có chắc chắn muốn thanh toán hóa đơn <strong>{payConfirmDialog.billName}</strong> với số tiền{" "}
-              <strong>{payConfirmDialog.amount.toLocaleString("vi-VN")} đ</strong>?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Hủy</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={async () => {
-                if (payConfirmDialog.billId) {
-                  await handlePayBill(payConfirmDialog.billId, payConfirmDialog.billName);
-                  setPayConfirmDialog({ open: false, billId: null, billName: "", amount: 0 });
-                }
-              }}>
-              Xác nhận thanh toán
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        <FormDialogHeader>
+          <FormDialogTitle>Xác nhận thanh toán</FormDialogTitle>
+          <FormDialogDescription>
+            Bạn có chắc chắn muốn thanh toán hóa đơn <strong>{payConfirmDialog.billName}</strong> với số tiền{" "}
+            <strong>{payConfirmDialog.amount.toLocaleString("vi-VN")} đ</strong>?
+          </FormDialogDescription>
+        </FormDialogHeader>
+        <div className="flex gap-2 justify-end pt-4">
+          <Button
+            variant="outline"
+            onClick={() => setPayConfirmDialog({ open: false, billId: null, billName: "", amount: 0 })}>
+            Hủy
+          </Button>
+          <Button
+            onClick={async () => {
+              if (payConfirmDialog.billId) {
+                await handlePayBill(payConfirmDialog.billId, payConfirmDialog.billName);
+                setPayConfirmDialog({ open: false, billId: null, billName: "", amount: 0 });
+              }
+            }}>
+            Xác nhận thanh toán
+          </Button>
+        </div>
+      </FormDialog>
 
       {/* Disambiguation Dialog - When multiple bills have the same name */}
-      <AlertDialog
+      <FormDialog
         open={disambiguationDialog.open}
-        onOpenChange={(open) => !open && setDisambiguationDialog({ open: false, bills: [] })}>
-        <AlertDialogContent className="max-w-2xl">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5 text-primary" />
-              Chọn hóa đơn
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              Tìm thấy nhiều hóa đơn có cùng tên. Vui lòng chọn hóa đơn bạn muốn thanh toán:
-            </AlertDialogDescription>
-          </AlertDialogHeader>
+        onOpenChange={(open) => !open && setDisambiguationDialog({ open: false, bills: [] })}
+        className="max-w-2xl w-[95vw] sm:w-full rounded-xl sm:rounded-2xl">
+        <FormDialogHeader>
+          <FormDialogTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5 text-primary" />
+            Chọn hóa đơn
+          </FormDialogTitle>
+          <FormDialogDescription>
+            Tìm thấy nhiều hóa đơn có cùng tên. Vui lòng chọn hóa đơn bạn muốn thanh toán:
+          </FormDialogDescription>
+        </FormDialogHeader>
 
-          <div className="space-y-2 max-h-[400px] overflow-y-auto">
-            {disambiguationDialog.bills.map((bill) => (
-              <button
-                key={bill.id}
-                onClick={() => handleBillSelection(bill)}
-                disabled={bill.status === "paid"}
-                className="w-full p-4 rounded-lg border border-border hover:border-primary hover:bg-accent transition-all text-left group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-border disabled:hover:bg-transparent">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h4 className="font-semibold text-base group-hover:text-primary transition-colors">
-                        {bill.bill_name}
-                      </h4>
-                      {bill.category && (
-                        <Badge variant="outline" className="text-xs">
-                          {getCategoryText(bill.category)}
-                        </Badge>
-                      )}
-                      {bill.status === "paid" && (
-                        <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
-                          Đã thanh toán
-                        </Badge>
-                      )}
-                      {bill.status === "overdue" && (
-                        <Badge variant="outline" className="text-xs bg-red-50 text-red-700 border-red-200">
-                          Quá hạn
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <span>
-                        Số tiền:{" "}
-                        <span className="font-medium text-foreground">{bill.amount.toLocaleString("vi-VN")} VND</span>
+        <div className="space-y-2 max-h-[400px] overflow-y-auto">
+          {disambiguationDialog.bills.map((bill) => (
+            <button
+              key={bill.id}
+              onClick={() => handleBillSelection(bill)}
+              disabled={bill.status === "paid"}
+              className="w-full p-4 rounded-lg border border-border hover:border-primary hover:bg-accent transition-all text-left group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-border disabled:hover:bg-transparent">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h4 className="font-semibold text-base group-hover:text-primary transition-colors">
+                      {bill.bill_name}
+                    </h4>
+                    {bill.category && (
+                      <Badge variant="outline" className="text-xs">
+                        {getCategoryText(bill.category)}
+                      </Badge>
+                    )}
+                    {bill.status === "paid" && (
+                      <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                        Đã thanh toán
+                      </Badge>
+                    )}
+                    {bill.status === "overdue" && (
+                      <Badge variant="outline" className="text-xs bg-red-50 text-red-700 border-red-200">
+                        Quá hạn
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                    <span>
+                      Số tiền:{" "}
+                      <span className="font-medium text-foreground">{bill.amount.toLocaleString("vi-VN")} VND</span>
+                    </span>
+                    <span>•</span>
+                    <span>
+                      Hạn:{" "}
+                      <span className="font-medium">
+                        {bill.dueDate instanceof Date
+                          ? bill.dueDate.toLocaleDateString("vi-VN")
+                          : new Date(bill.dueDate).toLocaleDateString("vi-VN")}
                       </span>
-                      <span>•</span>
-                      <span>
-                        Hạn:{" "}
-                        <span className="font-medium">
-                          {bill.dueDate instanceof Date
-                            ? bill.dueDate.toLocaleDateString("vi-VN")
-                            : new Date(bill.dueDate).toLocaleDateString("vi-VN")}
-                        </span>
-                      </span>
-                    </div>
+                    </span>
                   </div>
                 </div>
-              </button>
-            ))}
-          </div>
+              </div>
+            </button>
+          ))}
+        </div>
 
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setDisambiguationDialog({ open: false, bills: [] })}>
-              Hủy
-            </AlertDialogCancel>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        <div className="flex gap-2 justify-end pt-4">
+          <Button variant="outline" onClick={() => setDisambiguationDialog({ open: false, bills: [] })}>
+            Hủy
+          </Button>
+        </div>
+      </FormDialog>
     </Card>
   );
 }

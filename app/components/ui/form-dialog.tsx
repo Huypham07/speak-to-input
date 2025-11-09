@@ -18,9 +18,9 @@ export function FormDialog({ open, onOpenChange, children, className }: FormDial
     <>
       <div
         className={cn(
-          "fixed bg-gray-800/70 backdrop-blur-sm z-50",
+          "fixed bg-gray-800/70 backdrop-blur-xs z-50",
           "inset-0 bottom-0 md:bottom-0 md:inset-0",
-          "animate-in fade-in-0 duration-200"
+          "animate-in fade-in-0 duration-200 m-0"
         )}
         aria-hidden="true"
       />

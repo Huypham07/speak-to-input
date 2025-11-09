@@ -11,6 +11,7 @@ import { FormDialog, FormDialogHeader, FormDialogTitle } from "@/components/ui/f
 import { ChevronLeft } from "lucide-react";
 import { useSpeech } from "@/lib/speech-context";
 import { useAppStore } from "@/lib/stores/app-store";
+import { useFinancial } from "@/lib/financial-context";
 
 export default function FundsPage() {
   const { user, isLoading } = useAuth();
@@ -19,21 +20,32 @@ export default function FundsPage() {
   const [isCreating, setIsCreating] = useState(false);
   const { extractedIntent } = useSpeech();
   const isRecording = useAppStore((state) => state.isRecording);
+  const { refreshFunds } = useFinancial();
 
-  // Auto-open dialog ONLY for CREATE_FUND intent
+  // Auto-open dialog for fund-related voice intents
   useEffect(() => {
-    if (!extractedIntent || extractedIntent.intent_changed) return;
+    if (!extractedIntent) return;
 
     const { intent_type, parameters } = extractedIntent;
 
-    // STRICTLY only handle create_fund - nothing else
-    if (intent_type !== "create_fund") {
-      return; // Exit early for all other intents
+    // Handle CREATE_FUND - auto-open dialog when intent is detected
+    if (intent_type === "create_fund") {
+      // Open dialog after a delay to ensure page is rendered
+      setTimeout(() => {
+        setIsCreating(true);
+      }, 300);
+      return;
     }
 
-    // Only open if has basic info
-    if (parameters.fund_name || parameters.target_amount) {
-      setIsCreating(true);
+    // Handle DEPOSIT_FUND and WITHDRAW_FUND - can handle even if navigated here
+    if (intent_type === "deposit_fund" || intent_type === "withdraw_fund") {
+      // For deposit/withdraw, we need to select which fund
+      // This will be handled by opening a dialog/form
+      // For now, just open the create dialog as placeholder
+      // TODO: Implement fund selection dialog
+      console.log(`📝 [FundsPage] Handling ${intent_type} with params:`, parameters);
+      // Don't auto-open for now, let user select fund from list
+      // setIsCreating(true);
     }
   }, [extractedIntent]);
 
@@ -92,7 +104,12 @@ export default function FundsPage() {
           <FormDialogTitle className="text-lg sm:text-xl">Tạo quỹ tiết kiệm</FormDialogTitle>
         </FormDialogHeader>
         <div className="overflow-y-auto flex-1 px-4 sm:px-6 pt-3 sm:pt-4">
-          <FundForm onSuccess={() => setIsCreating(false)} />
+          <FundForm
+            onSuccess={() => {
+              setIsCreating(false);
+              refreshFunds(); // Refresh funds list after creating
+            }}
+          />
         </div>
       </FormDialog>
     </div>

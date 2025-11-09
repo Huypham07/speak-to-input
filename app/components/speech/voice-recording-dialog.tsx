@@ -118,7 +118,7 @@ export function VoiceRecordingDialog({ open, onClose, onStop, isProcessing = fal
     <Dialog open={open} onOpenChange={onClose}>
       <DialogPortal>
         {/* Custom overlay with higher z-index and transparent on mobile */}
-        <DialogPrimitive.Overlay className="fixed inset-0 z-90 bg-transparent md:bg-gray-800/50 md:backdrop-blur-xs data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 pointer-events-none md:pointer-events-auto" />
+        <DialogPrimitive.Overlay className="fixed inset-0 z-90 bg-gray-800/70 backdrop-blur-xs data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 pointer-events-none md:pointer-events-auto" />
 
         <DialogPrimitive.Content className="fixed left-[50%] sm:top-[50%] bottom-24 sm:bottom-auto top-auto translate-x-[-50%] translate-y-0 sm:translate-y-[-50%] z-100 sm:max-w-[400px] max-w-[90vw] rounded-2xl p-4 bg-background border border-border shadow-lg pointer-events-auto data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
           <DialogHeader className="sr-only">

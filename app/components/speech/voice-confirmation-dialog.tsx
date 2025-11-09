@@ -38,7 +38,7 @@ export function VoiceConfirmationDialog({ open, onOpenChange }: VoiceConfirmatio
   const intentNameMap: Record<string, string> = {
     create_bill: "Tạo hóa đơn",
     pay_bill: "Thanh toán hóa đơn",
-    create_transfer: "Chuyển tiền",
+    send_money: "Chuyển tiền",
     deposit: "Nạp tiền",
     withdraw: "Rút tiền",
     create_fund: "Tạo quỹ tiết kiệm",

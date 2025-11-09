@@ -12,6 +12,7 @@ import { ChevronLeft } from "lucide-react";
 import { useSpeech } from "@/lib/speech-context";
 import { VoiceFormSync } from "@/components/speech/voice-form-sync";
 import { useAppStore } from "@/lib/stores/app-store";
+import { useFinancial } from "@/lib/financial-context";
 
 export default function BillsPage() {
   const { user, isLoading } = useAuth();
@@ -20,22 +21,23 @@ export default function BillsPage() {
   const [isCreating, setIsCreating] = useState(false);
   const { extractedIntent } = useSpeech();
   const isRecording = useAppStore((state) => state.isRecording);
+  const { refreshBills } = useFinancial();
 
   // Auto-open dialog ONLY for CREATE_BILL intent
   useEffect(() => {
-    if (!extractedIntent || extractedIntent.intent_changed) return;
+    if (!extractedIntent) return;
 
-    const { intent_type, parameters } = extractedIntent;
+    const { intent_type } = extractedIntent;
 
     // STRICTLY only handle create_bill - nothing else
     if (intent_type !== "create_bill") {
       return; // Exit early for all other intents
     }
 
-    // Only open if has basic info
-    if (parameters.bill_name || parameters.amount) {
+    // Open dialog after a delay to ensure page is rendered
+    setTimeout(() => {
       setIsCreating(true);
-    }
+    }, 300);
   }, [extractedIntent]);
 
   // Redirect to login if not authenticated
@@ -93,7 +95,12 @@ export default function BillsPage() {
           <FormDialogTitle className="text-lg sm:text-xl">Tạo hóa đơn mới</FormDialogTitle>
         </FormDialogHeader>
         <div className="overflow-y-auto flex-1 px-4 sm:px-6 pt-3 sm:pt-4">
-          <BillForm onSuccess={() => setIsCreating(false)} />
+          <BillForm
+            onSuccess={() => {
+              setIsCreating(false);
+              refreshBills(); // Refresh bills list after creating
+            }}
+          />
         </div>
       </FormDialog>
     </div>

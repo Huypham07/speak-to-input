@@ -41,7 +41,7 @@ class DeleteFundPlugin(IntentPlugin):
                 },
                 'fund_name': {
                     'type': 'string',
-                    'description': 'Fund name to delete (alternative to fund_id)',
+                    'description': 'Fund name to delete (alternative to fund_id). MUST include the word "quỹ" (e.g., "quỹ tiết kiệm", "quỹ khẩn cấp"). Do NOT extract just the keyword without "quỹ".',
                 },
             },
         }

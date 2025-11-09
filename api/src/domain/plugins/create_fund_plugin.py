@@ -39,7 +39,7 @@ class CreateFundPlugin(IntentPlugin):
             'properties': {
                 'fund_name': {
                     'type': 'string',
-                    'description': 'Fund/goal name (e.g., "Mua xe", "Du lịch")',
+                    'description': 'Fund/goal name. MUST include the word "quỹ" (e.g., "quỹ mua xe", "quỹ du lịch", "quỹ tiết kiệm"). Do NOT extract just the keyword without "quỹ".',
                     'minLength': 1,
                     'maxLength': 100,
                 },
