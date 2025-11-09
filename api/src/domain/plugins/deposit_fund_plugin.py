@@ -42,7 +42,7 @@ class DepositFundPlugin(IntentPlugin):
                 },
                 'fund_name': {
                     'type': 'string',
-                    'description': 'Fund name to deposit to (alternative to fund_id)',
+                    'description': 'Fund name to deposit to (alternative to fund_id). MUST include the word "quỹ" (e.g., "quỹ tiết kiệm", "quỹ khẩn cấp", "quỹ du lịch"). Do NOT extract just the keyword without "quỹ".',
                 },
                 'amount': {
                     'type': 'number',

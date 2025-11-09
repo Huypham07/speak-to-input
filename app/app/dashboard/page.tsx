@@ -10,7 +10,6 @@ import { StatisticsOverview } from "@/components/dashboard/statistics-overview";
 import { TransfersList } from "@/components/dashboard/transfers-list";
 import { BillsList } from "@/components/dashboard/bills-list";
 import { FundsList } from "@/components/dashboard/funds-list";
-import { useSpeech } from "@/lib/speech-context";
 import { Settings, User, LogOut } from "lucide-react";
 import {
   DropdownMenu,
@@ -25,14 +24,9 @@ export default function DashboardPage() {
   const { user, isLoading, logout } = useAuth();
   const { isCollapsed } = useSidebar();
   const router = useRouter();
-  const { extractedIntent } = useSpeech();
 
-  // Navigate to accounts page with transfer tab when voice intent is received
-  useEffect(() => {
-    if (extractedIntent && extractedIntent.intent_type === "create_transfer" && !extractedIntent.intent_changed) {
-      router.push("/accounts?action=transfer");
-    }
-  }, [extractedIntent, router]);
+  // Note: Voice navigation is handled by speech-context.tsx
+  // No need to redirect based on extractedIntent here
 
   useEffect(() => {
     if (!isLoading && !user) {

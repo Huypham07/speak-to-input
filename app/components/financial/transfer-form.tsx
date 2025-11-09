@@ -27,7 +27,30 @@ export function TransferForm({ accountId, currentBalance, onSuccess }: TransferF
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+
+  // Zustand stores
+  const setCurrentForm = useFormStore((state) => state.setCurrentForm);
   const updateFormData = useFormStore((state) => state.updateFormData);
+  const clearForm = useFormStore((state) => state.clearForm);
+
+  // Update form store when data changes
+  useEffect(() => {
+    console.log("📝 TransferForm: Setting form type to send_money");
+    setCurrentForm("send_money", {
+      recipient_account_number: recipientAccountNumber,
+      recipient_name: recipientName,
+      amount,
+      message,
+    });
+  }, [recipientAccountNumber, recipientName, amount, message, setCurrentForm]);
+
+  // Clear on unmount
+  useEffect(() => {
+    return () => {
+      console.log("🧹 TransferForm: Clearing form on unmount");
+      clearForm();
+    };
+  }, [clearForm]);
 
   // Helper functions to sync with store
   const handleRecipientAccountNumberChange = (value: string) => {
@@ -71,10 +94,22 @@ export function TransferForm({ accountId, currentBalance, onSuccess }: TransferF
   const handleVoiceParameters = useCallback((params: Record<string, any>) => {
     console.log("📝 Filling transfer form with voice params:", params);
 
-    // Map backend 'recipient' to recipient_account_number
+    // Backend returns 'recipient' which could be either a name or account number
+    // We need to determine which field to fill based on the value
     if (params.recipient) {
-      handleRecipientAccountNumberChange(params.recipient);
+      const recipient = String(params.recipient).trim();
+
+      // If recipient looks like an account number (all digits), fill account number field
+      // Otherwise, fill recipient name field
+      if (/^\d+$/.test(recipient)) {
+        handleRecipientAccountNumberChange(recipient);
+      } else {
+        // It's a name - fill the name field
+        handleRecipientNameChange(recipient);
+      }
     }
+
+    // Also handle explicit fields if provided
     if (params.recipient_account_number) {
       handleRecipientAccountNumberChange(params.recipient_account_number);
     }
@@ -174,7 +209,7 @@ export function TransferForm({ accountId, currentBalance, onSuccess }: TransferF
     <>
       {/* Voice Form Sync */}
       <VoiceFormSync
-        intentType="create_transfer"
+        intentType="send_money"
         onParametersReceived={handleVoiceParameters}
         getCurrentFormData={() => ({
           recipient_account_number: recipientAccountNumber,

@@ -62,6 +62,10 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
     needs_confirmation: boolean;
   } | null>(null);
 
+  // Track if navigation was triggered by voice command
+  const isVoiceNavigationRef = useRef(false);
+  const previousPathnameRef = useRef(pathname);
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -98,7 +102,7 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
         // Map backend IntentType enum to frontend intent types and routes
         const intentMapping: Record<string, string> = {
           // Transaction intents
-          SEND_MONEY: "create_transfer",
+          SEND_MONEY: "send_money",
 
           // Financial management intents
           CREATE_BILL: "create_bill",
@@ -112,18 +116,8 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
           CHECK_BALANCE: "check_balance",
           QUERY_FINANCE: "query_finance",
 
-          // Account intents
-          ACCOUNT_OPENING: "account_opening",
-
-          // Other intents
-          QUICK_ACTION: "quick_action",
-          CREATE_LOAN: "create_loan",
-          BUDGET_ALLOCATION: "budget_allocation",
-
           // Meta intents
           UNKNOWN: "unknown",
-          CONFIRMATION: "confirmation",
-          CANCELLATION: "cancellation",
         };
 
         return intentMapping[type] || type.toLowerCase();
@@ -132,6 +126,13 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
       const normalizedIntentType = normalizeIntentType(data.intent_type);
 
       // Save intent data with normalized type
+      console.log("✅ Setting extractedIntent:", {
+        intent_type: normalizedIntentType,
+        intent_changed: data.intent_changed,
+        action: data.action,
+        pathname: pathname,
+      });
+
       setExtractedIntent({
         intent_type: normalizedIntentType,
         parameters: data.parameters,
@@ -147,7 +148,7 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
       // Map normalized intent types to routes and Vietnamese names
       const intentInfoMap: Record<string, { route: string; name: string }> = {
         // Transaction & Transfer
-        create_transfer: { route: "/accounts?action=transfer", name: "Chuyển tiền" },
+        send_money: { route: "/accounts?action=transfer", name: "Chuyển tiền" },
 
         // Bills
         create_bill: { route: "/bills", name: "Tạo hóa đơn" },
@@ -163,15 +164,6 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
         check_balance: { route: "/accounts", name: "Kiểm tra số dư" },
         query_finance: { route: "/dashboard", name: "Tra cứu tài chính" },
 
-        // Account
-        account_opening: { route: "/accounts", name: "Mở tài khoản" },
-
-        // Other
-        quick_action: { route: "/dashboard", name: "Thao tác nhanh" },
-        create_loan: { route: "/dashboard", name: "Tạo khoản vay" },
-        budget_allocation: { route: "/dashboard", name: "Phân bổ ngân sách" },
-
-        // Meta
         unknown: { route: "/dashboard", name: "Không nhận dạng được" },
       };
 
@@ -184,7 +176,7 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
           params: Record<string, any>
         ): { valid: boolean; missing: string[] } => {
           const requiredParamsMap: Record<string, string[]> = {
-            create_transfer: ["amount", "recipient"],
+            send_money: ["amount"], // recipient is validated separately
             create_bill: ["bill_name", "amount"],
             pay_bill: [], // Can use bill_id OR bill_name
             create_fund: ["fund_name", "target_amount"],
@@ -195,6 +187,15 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
 
           const required = requiredParamsMap[intentType] || [];
           const missing = required.filter((key) => !params[key] || params[key] === "");
+
+          // Special validation for transfer - need recipient info
+          if (intentType === "send_money") {
+            // Accept: recipient OR (recipient_name OR recipient_account_number)
+            const hasRecipient = params.recipient || params.recipient_name || params.recipient_account_number;
+            if (!hasRecipient) {
+              return { valid: false, missing: [...missing, "recipient"] };
+            }
+          }
 
           // Special validation for intents that can use either ID or name
           if (intentType === "pay_bill") {
@@ -245,6 +246,8 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
             id: "voice-navigate",
           });
 
+          // Mark as voice navigation before pushing
+          isVoiceNavigationRef.current = true;
           router.push(intentInfo.route);
 
           setTimeout(() => {
@@ -264,11 +267,10 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
             id: "voice-navigate",
           });
 
-          // Navigate to the appropriate screen
-          if (data.intent_changed) {
-            // Intent changed, navigating
-          }
+          // Mark as voice navigation before pushing
+          isVoiceNavigationRef.current = true;
 
+          // Navigate to the appropriate screen
           router.push(intentInfo.route);
 
           // Dismiss loading toast and show result after navigation
@@ -376,6 +378,18 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
         const formContext = getCurrentFormContext();
         const contextFormData = formData || formContext.data;
         const contextIntentType = intentType || formContext.type;
+
+        console.log("🎤 startListening called with:", {
+          passedFormData: formData,
+          passedIntentType: intentType,
+          storeFormType: formContext.type,
+          storeFormData: formContext.data,
+          finalFormData: contextFormData,
+          finalIntentType: contextIntentType,
+          pathname: pathname,
+        });
+        console.log("📦 Full contextFormData:", JSON.stringify(contextFormData, null, 2));
+        console.log("📦 Full finalIntentType:", contextIntentType);
 
         setError(null);
         setTranscript("");
@@ -654,6 +668,24 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
       disconnect();
     };
   }, [disconnect]);
+
+  // Clear extractedIntent when user navigates to a different page
+  useEffect(() => {
+    // Only clear intent if this is a manual navigation (not triggered by voice)
+    if (pathname !== previousPathnameRef.current) {
+      if (isVoiceNavigationRef.current) {
+        // This is a voice-triggered navigation, don't clear intent yet
+        // Intent will be used by the new page's form
+        console.log("🔄 Voice navigation to:", pathname, "- Keeping extractedIntent for form filling");
+        isVoiceNavigationRef.current = false; // Reset flag
+      } else {
+        // This is a manual navigation (user clicked link), clear intent
+        console.log("🔄 Manual navigation to:", pathname, "- Clearing extractedIntent");
+        setExtractedIntent(null);
+      }
+      previousPathnameRef.current = pathname;
+    }
+  }, [pathname]);
 
   return (
     <SpeechContext.Provider

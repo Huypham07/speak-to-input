@@ -26,12 +26,17 @@ export function VoiceProcessingOverlay() {
   }
 
   return (
-    <div className="fixed inset-0 z-9999 flex items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-none md:pointer-events-auto">
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-8 flex flex-col items-center gap-6 max-w-sm mx-4 pointer-events-auto">
+    <div className="fixed inset-0 z-9999 flex items-center justify-center bg-gray-800/70 backdrop-blur-xs pointer-events-none md:pointer-events-auto transition-opacity duration-300">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-8 flex flex-col items-center gap-6 max-w-sm mx-4 pointer-events-auto animate-in fade-in zoom-in-95 duration-300">
         {/* Animated loader */}
-        <div className="relative">
-          <div className="absolute inset-0 bg-linear-to-r from-blue-600 to-emerald-600 rounded-full animate-pulse opacity-20" />
-          <Loader2 className="w-16 h-16 text-blue-600 animate-spin" />
+        <div className="relative w-20 h-20 flex items-center justify-center">
+          {/* Pulsing background circle */}
+          <div className="absolute inset-0 bg-linear-to-r from-blue-500 to-emerald-500 rounded-full opacity-20 animate-pulse" />
+          {/* Spinning outer ring */}
+          <div
+            className="absolute inset-0 rounded-full border-4 border-transparent border-t-blue-600 border-r-blue-600 animate-spin"
+            style={{ animationDuration: "1s" }}
+          />
         </div>
 
         {/* Text */}
@@ -42,7 +47,10 @@ export function VoiceProcessingOverlay() {
 
         {/* Progress animation */}
         <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
-          <div className="h-full bg-linear-to-r from-blue-600 to-emerald-600 rounded-full animate-[progress_2s_ease-in-out_infinite]" />
+          <div
+            className="h-full bg-linear-to-r from-blue-600 to-emerald-600 rounded-full animate-[progress_2s_ease-in-out_infinite]"
+            style={{ willChange: "transform" }}
+          />
         </div>
       </div>
     </div>
